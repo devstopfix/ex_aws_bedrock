@@ -10,7 +10,7 @@ defmodule ExAws.Bedrock.MixProject do
     [
       app: :ex_aws_bedrock,
       version: @version,
-      elixir: "~> 1.11",
+      elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       docs: [main: @name, source_ref: "v#{@version}", source_url: @url],
