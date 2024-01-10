@@ -19,7 +19,7 @@ along with `:ex_aws` and your preferred JSON codec / HTTP client
 def deps do
   [
     {:ex_aws, "~> 2.0"},
-    {:ex_aws_bedrock, "~> 0.0"},
+    {:ex_aws_bedrock, "~> 0.1"},
     {:poison, "~> 3.0"},
     {:hackney, "~> 1.9"}
   ]
