@@ -8,6 +8,8 @@ Service module for [Elixir AWS](https://github.com/ex-aws/ex_aws).
 
 ***NOTE*** this is a work in progress and awaiting [PR 1023](https://github.com/ex-aws/ex_aws/pull/1023).
 
+[![ci](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml/badge.svg)](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml)
+
 ## Installation
 
 The package can be installed by adding `:ex_aws_bedrock` to your list of dependencies in `mix.exs`
