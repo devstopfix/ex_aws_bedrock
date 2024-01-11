@@ -6,7 +6,8 @@
 
 Service module for [Elixir AWS](https://github.com/ex-aws/ex_aws).
 
-***NOTE*** this is a work in progress and awaiting [PR 1023](https://github.com/ex-aws/ex_aws/pull/1023).
+***NOTE*** this is a work in progress as the operations are uploaded over the next few days
+and requires a minimum `ex_aws` version of 2.5.1.
 
 [![ci](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml/badge.svg)](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml)
 
@@ -18,7 +19,7 @@ along with `:ex_aws` and your preferred JSON codec / HTTP client
 ```elixir
 def deps do
   [
-    {:ex_aws, "~> 2.0"},
+    {:ex_aws, "~> 2.5.1"},
     {:ex_aws_bedrock, "~> 0.1"},
     {:poison, "~> 3.0"},
     {:hackney, "~> 1.9"}
