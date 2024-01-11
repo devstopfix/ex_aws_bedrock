@@ -32,9 +32,11 @@ defmodule ExAws.Bedrock.Titan.TextModelTest do
   end
 
   setup_all do
+    unit = if Version.compare(System.version(), "1.14.0") in [:gt, :eq], do: :day, else: :second
+
     d =
       DateTime.utc_now()
-      |> DateTime.add(-20 * 365, :day)
+      |> DateTime.add(-12 * 365, unit)
       |> Calendar.strftime("%A %B %d, %Y")
 
     prompt = "Write a Wikipedia article about historic events on the day of #{d}"
