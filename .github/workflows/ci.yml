@@ -30,6 +30,8 @@ jobs:
       - run: mix compile
       - run: mix format --check-formatted
         if: matrix.elixir == '1.15.x'
-      - run: mix dialyzer
+      - run: mix credo --strict
         if: matrix.elixir == '1.15.x'
       - run: mix test
+      - run: mix dialyzer
+        if: matrix.elixir == '1.15.x'
