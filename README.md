@@ -23,7 +23,7 @@ along with `:ex_aws`, `:jason` JSON codec, and your preferred HTTP client
 def deps do
   [
     {:ex_aws, ">= 2.5.1"},
-    {:ex_aws_bedrock, "~> 0.5"},
+    {:ex_aws_bedrock, "~> 1.5"},
     {:hackney, "~> 1.9"},
     {:jason, "~> 1.1"},
     {:poison, "~> 3.0"}
