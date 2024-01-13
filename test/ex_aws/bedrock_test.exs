@@ -1,5 +1,6 @@
 defmodule ExAws.BedrockTest do
   use ExUnit.Case
+  import ExAws.Bedrock.Request, only: [request!: 1]
   alias ExAws.Bedrock
   alias ExAws.Operation.JSON
 
@@ -12,7 +13,7 @@ defmodule ExAws.BedrockTest do
                "modelDetails" => %{
                  "modelId" => @model_id
                }
-             } = ExAws.request!(request)
+             } = request!(request)
     end
 
     test "http get", %{request: request} do
