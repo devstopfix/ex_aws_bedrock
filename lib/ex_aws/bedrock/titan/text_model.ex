@@ -10,7 +10,11 @@ defmodule ExAws.Bedrock.Titan.TextModel do
   @derive Jason.Encoder
   defstruct inputText: "Hello, LLM.", textGenerationConfig: %TextGenerationConfig{}
 
-  @doc "Build struct from Elixir style keyword list"
+  @doc """
+  Build struct with input and parameters.
+
+  See `ExAws.Bedrock.Titan.TextGenerationConfig.build/1`
+  """
   def build(input_text, parameters \\ []) when is_binary(input_text) do
     config = TextGenerationConfig.build(parameters)
 
