@@ -1,7 +1,7 @@
 defmodule ExAws.Bedrock.MixProject do
   use Mix.Project
 
-  @version "0.1.25"
+  @version "0.5.1"
   @service "bedrock"
   @url "https://github.com/devstopfix/ex_aws_#{@service}"
   @name "ExAws.Bedrock"
@@ -38,18 +38,12 @@ defmodule ExAws.Bedrock.MixProject do
     [
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:ex_aws, ">= 2.5.1"},
       {:ex_doc, ">= 0.0.0", only: :dev},
       {:hackney, ">= 0.0.0", only: [:dev, :test]},
       {:jason, ">= 0.0.0", only: [:dev, :test]},
       {:sweet_xml, ">= 0.0.0", optional: true},
-      ex_aws()
     ]
   end
 
-  defp ex_aws() do
-    case System.get_env("AWS") do
-      "LOCAL" -> {:ex_aws, path: "../ex_aws"}
-      _ -> {:ex_aws, "~> 2.0"}
-    end
-  end
 end
