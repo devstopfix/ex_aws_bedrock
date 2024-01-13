@@ -37,7 +37,7 @@ defmodule ExAws.Bedrock do
   Use `ExAws.Bedrock.request/2` to automatically provide the correct parameter.
 
   Model parameters are normally JSON documents defined in the link below, therefore pass a
-  struct or map that can be serialized with `Jason.encode!`.
+  struct or map that can be serialized with `Jason.encode/1`.
 
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)
 
