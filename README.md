@@ -10,6 +10,9 @@ Service module for [Elixir AWS](https://github.com/ex-aws/ex_aws).
 and requires a minimum `ex_aws` version of 2.5.1.
 
 [![ci](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml/badge.svg)](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/ex_aws_bedrock.svg?style=flat-square)](https://hex.pm/packages/ex_aws_bedrock)
+[![API Docs](https://img.shields.io/badge/api-docs-MediumOrange.svg?style=flat)](https://hexdocs.pm/ex_aws_bedrock/ExAws.Bedrock.html)
+
 
 ## Installation
 

@@ -9,22 +9,29 @@ defmodule ExAws.Bedrock.MixProject do
   def project do
     [
       app: :ex_aws_bedrock,
-      version: @version,
-      elixir: "~> 1.12",
-      start_permanent: Mix.env() == :prod,
       deps: deps(),
+      description:
+        "The easiest way to build and scale generative AI applications with foundation models",
       docs: [main: @name, source_ref: "v#{@version}", source_url: @url],
-      package: package()
+      elixir: "~> 1.12",
+      package: package(),
+      start_permanent: Mix.env() == :prod,
+      version: @version
     ]
   end
 
   defp package do
     [
       description: "#{@name} service package",
-      files: ["lib", "config", "mix.exs", "README*"],
-      maintainers: ["J Every"],
+      files: ["lib", "mix.exs", "README.md"],
       licenses: ["MIT"],
-      links: %{GitHub: @url}
+      links: %{
+        Bedrock: "https://aws.amazon.com/bedrock/",
+        ExAws: "https://hex.pm/packages/ex_aws",
+        Docs: "https://hexdocs.pm/ex_aws_bedrock/#{@version}",
+        GitHub: @url
+      },
+      maintainers: ["J Every"]
     ]
   end
 
