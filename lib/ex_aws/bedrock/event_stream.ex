@@ -117,7 +117,7 @@ defmodule ExAws.Bedrock.EventStream do
     end
   else
     def stream_objects!(_, _, _) do
-      raise "Bedrock response streaming requires hackney in your mix dependencies and Elixir 1.14"
+      raise "Bedrock response streaming requires hackney in your mix dependencies"
     end
   end
 
