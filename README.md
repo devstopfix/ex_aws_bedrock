@@ -17,7 +17,7 @@ and requires a minimum `ex_aws` version of 2.5.1.
 ## Installation
 
 The package can be installed by adding `:ex_aws_bedrock` to your list of dependencies in `mix.exs`
-along with `:ex_aws`, `:jason` JSON codec, and your preferred HTTP client
+along with `:ex_aws`, and your preferred HTTP client and JSON codec.
 
 ```elixir
 def deps do
@@ -30,9 +30,6 @@ def deps do
   ]
 end
 ```
-
-While `ex_aws` allows you to choose JSON codec the input to the AWS models are JSON and this library
-chooses to accept maps and structs that implement the [Jason Encoder protocol](jason).
 
 ## Unit tests
 
