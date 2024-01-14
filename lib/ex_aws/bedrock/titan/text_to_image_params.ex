@@ -15,8 +15,8 @@ defmodule ExAws.Bedrock.Titan.TextToImageParams do
 
   defimpl Jason.Encoder, for: __MODULE__ do
     def encode(value, opts) do
-      encoded = for {k, v} <- Map.from_struct(value), v != nil, into: %{}, do: {k, v}
-      Jason.Encode.map(encoded, opts)
+      drop_nils = for {k, v} <- Map.from_struct(value), v != nil, into: %{}, do: {k, v}
+      Jason.Encode.map(drop_nils, opts)
     end
   end
 end
