@@ -52,14 +52,19 @@ defmodule ExAws.Bedrock do
   Use `ExAws.Bedrock.request/2` to automatically provide the correct parameter.
 
   Model parameters are normally JSON documents defined in the link below, therefore pass a
-  struct or map that can be serialized with `Jason.encode/1`.
+  struct or map that can be serialized with your configured JSON codec.
+
+  Images will be returned base 64 encoded:
+
+      {:ok, %{"images" => [image]}} = ExAws.request(request, service_override: :bedrock);
+      {:ok, png} = Base.decode64(image)
 
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)
 
   [Model Parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters.html)
 
   """
-  @spec invoke_model(String.t(), Jason.Encoder.t()) :: ExAws.Operation.t()
+  @spec invoke_model(String.t(), map | struct) :: ExAws.Operation.t()
 
   def invoke_model(model_id, inference_parameters) when is_binary(model_id) do
     %ExAws.Operation.JSON{
