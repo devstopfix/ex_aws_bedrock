@@ -31,7 +31,7 @@ end
 ***NOTE***:
 
 * this requires a minimum `ex_aws` version of 2.5.1.
-* if you wish to stream responses, please include `hackney` and `jason`.
+* if you wish to stream responses, please include `hackney` and `jason` and run a minimum of Elixir 1.14.
 
 ## Unit tests
 
