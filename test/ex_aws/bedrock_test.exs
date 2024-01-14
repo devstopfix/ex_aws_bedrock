@@ -73,4 +73,93 @@ defmodule ExAws.BedrockTest do
       {:ok, [request: request]}
     end
   end
+
+  describe "list_foundation_models/1" do
+    @tag :aws
+    test "all models at AWS" do
+      request = Bedrock.list_foundation_models()
+      assert %{"modelSummaries" => [%{} | _]} = request!(request)
+    end
+
+    @tag :aws
+    test "models provided by Amazon" do
+      provider = "Amazon"
+      request = Bedrock.list_foundation_models(by_provider: provider)
+      assert %{"modelSummaries" => [%{"providerName" => ^provider} | _]} = request!(request)
+    end
+
+    @tag :aws
+    test "text models" do
+      request = Bedrock.list_foundation_models(by_output_modality: :TEXT)
+
+      assert %{"modelSummaries" => [%{"outputModalities" => ["TEXT" | _]} | _]} =
+               request!(request)
+    end
+
+    @tag :aws
+    test "text models provided by Meta" do
+      provider = "Meta"
+      request = Bedrock.list_foundation_models(by_output_modality: :TEXT, by_provider: provider)
+
+      assert %{
+               "modelSummaries" => [
+                 %{"outputModalities" => ["TEXT" | _], "providerName" => ^provider} | _
+               ]
+             } =
+               request!(request)
+    end
+
+    @tag :aws
+    test "on demand models" do
+      request = Bedrock.list_foundation_models(by_output_modality: :TEXT)
+
+      assert %{"modelSummaries" => [%{"inferenceTypesSupported" => ["ON_DEMAND" | _]} | _]} =
+               request!(request)
+    end
+
+    @tag :aws
+    test "allow fine tuning" do
+      request = Bedrock.list_foundation_models(by_customization_type: :FINE_TUNING)
+
+      assert %{"modelSummaries" => [%{"customizationsSupported" => ["FINE_TUNING"]} | _]} =
+               request!(request)
+    end
+
+    test "by customization type" do
+      request = Bedrock.list_foundation_models(by_customization_type: :FINE_TUNING)
+      assert %JSON{params: %{"byCustomizationType" => :FINE_TUNING}} = request
+    end
+
+    test "by inference type" do
+      request = Bedrock.list_foundation_models(by_inference_type: :ON_DEMAND)
+      assert %JSON{params: %{"byInferenceType" => :ON_DEMAND}} = request
+    end
+
+    test "by output modality" do
+      request = Bedrock.list_foundation_models(by_output_modality: :TEXT)
+      assert %JSON{params: %{"byOutputModality" => :TEXT}} = request
+    end
+
+    test "by provider" do
+      request = Bedrock.list_foundation_models(by_provider: "Amazon")
+      assert %JSON{params: %{"byProvider" => "Amazon"}} = request
+    end
+
+    test "http get", %{request: request} do
+      assert %JSON{http_method: :get} = request
+    end
+
+    test "path", %{request: request} do
+      assert %JSON{path: "/foundation-models"} = request
+    end
+
+    test "service", %{request: request} do
+      assert %JSON{service: :bedrock} = request
+    end
+
+    setup do
+      request = Bedrock.list_foundation_models()
+      {:ok, [request: request]}
+    end
+  end
 end
