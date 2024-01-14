@@ -8,6 +8,8 @@ defmodule ExAws.Bedrock do
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/welcome.html)
   """
 
+  import ExAws.Bedrock.Strings, only: [camel_case_keys: 1]
+
   @json_request_headers [{"Content-Type", "application/json"}]
 
   @doc """
@@ -53,6 +55,37 @@ defmodule ExAws.Bedrock do
       http_method: :post,
       path: "/model/#{model_id}/invoke",
       service: :"bedrock-runtime"
+    }
+  end
+
+  @doc """
+  List of Amazon Bedrock foundation models that you can use.
+
+  [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListFoundationModels.html)
+
+  ## Parameters
+
+    * `:by_customization_type` - `:FINE_TUNING | :CONTINUED_PRE_TRAINING`
+
+    * `:by_inference_type` - `:ON_DEMAND | :PROVISIONED`
+
+    * `:by_output_modality` - `:TEXT | :IMAGE | :EMBEDDING`
+
+    * `:by_provider` - An Amazon Bedrock model provider
+
+  """
+
+  def list_foundation_models(parameters \\ []) do
+    params = camel_case_keys(parameters)
+    action_request(:"foundation-models", params)
+  end
+
+  defp action_request(action, params) do
+    %ExAws.Operation.JSON{
+      http_method: :get,
+      path: "/" <> to_string(action),
+      params: params,
+      service: :bedrock
     }
   end
 
