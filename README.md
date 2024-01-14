@@ -47,8 +47,20 @@ Then set the variables and run the tests with:
 
     source .env && mix test --only aws
 
+## Usage
+
+The AWS bedrock actions and operations are defined in [ExAws.Bedrock module][mod].
+
+Each model takes their inference parameters as JSON documents which are defined 
+in the [model parameters section of the AWS user guide][models]. You can pass 
+plain Elixir maps which are then JSON encoded, or define structs which implement
+the encoder protocol of your chosen JSON codec. This library has an example
+under [ExAws.Bedrock.Titan.TextModel](lib/ex_aws/bedrock/titan/text_model.ex).
+
 ## License
 
 The MIT License (MIT).
 
 [json]: https://hexdocs.pm/jason/Jason.Encoder.html
+[mod]: https://hexdocs.pm/ex_aws_bedrock/ExAws.Bedrock.html
+[models]: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters.html
