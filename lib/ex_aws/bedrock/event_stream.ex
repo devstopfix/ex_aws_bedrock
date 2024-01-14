@@ -4,20 +4,144 @@ defmodule ExAws.Bedrock.EventStream do
 
   The model detail returned by `ExAws.Bedrock.get_foundation_model/1` must have:
 
-      responseStreamingSupported: true
+      responseStreamingSupported = true
 
-  This requires `hackney` otherwise will fail at runtime.
+  This requires `hackney` otherwise we will fail at runtime. It also assumes `Jason` is available
+  but we can improve this to lookup the ExAws JSON coded.
+
+  [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ResponseStream.html)
   """
 
   defdelegate build_request_url(post_operation, config), to: ExAws.Request.Url, as: :build
 
-  if Kernel.function_exported?(:hackney, :post, 4) do
+  @content_type "application/vnd.amazon.eventstream"
+
+  if {:module, :hackney} == Code.ensure_loaded(:hackney) &&
+       Kernel.function_exported?(:hackney, :post, 4) do
     @http_ua :hackney_request.default_ua()
     @library_version Application.spec(:ex_aws_bedrock)[:vsn]
     @user_agent "#{@http_ua} ex_aws/bedrock/#{@library_version}"
+    @headers [
+      {"accept", @content_type},
+      {"content-type", "application/json"},
+      {"user-agent", @user_agent},
+      {"x-amzn-bedrock-accept", "*/*"}
+    ]
+    @hackney_options [{:async, :once}]
+
+    @doc """
+    Stream of chunks from the response stream.
+
+    Raises on any error.
+
+    [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ResponseStream.html)
+    """
+    def stream_objects!(%{service: service, data: data} = post_operation, _opts, config) do
+      encoded_data = Jason.encode!(data)
+      url = build_request_url(post_operation, config)
+      config = Map.put(config, :service_override, :bedrock)
+
+      {:ok, full_headers} =
+        ExAws.Auth.headers(
+          :post,
+          url,
+          service,
+          config,
+          @headers,
+          encoded_data
+        )
+
+      request_fun = fn [] ->
+        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, @hackney_options)
+
+        receive do
+          {:hackney_response, ^ref, {:status, 200, _reason}} ->
+            ref
+
+          {:hackney_response, ^ref, {:status, status, reason}} ->
+            {:error, status, reason}
+
+          {:hackney_response, ^ref, {:error, {:closed, :timeout}}} ->
+            :closed
+        end
+      end
+
+      stream =
+        Stream.resource(
+          fn -> request_fun.([]) end,
+          fn
+            :closed ->
+              {:halt, []}
+
+            {:error, status, reason} ->
+              raise ExAws.Error, "#{to_string(status)}: #{to_string(reason)}"
+
+            ref when is_reference(ref) ->
+              :ok = :hackney.stream_next(ref)
+
+              receive do
+                {:hackney_response, ^ref, {:headers, headers}} ->
+                  verify_event_stream!(headers)
+                  verify_chunked!(headers)
+                  {[], ref}
+
+                {:hackney_response, ^ref, :done} ->
+                  {:halt, []}
+
+                {:hackney_response, ^ref, data} ->
+                  {[data], ref}
+              end
+          end,
+          &Function.identity/1
+        )
+
+      Stream.map(stream, &decode_chunk/1)
+    end
+
+    defp verify_event_stream!(headers) do
+      verify_header!(headers, "Content-Type", @content_type)
+    end
+
+    defp verify_chunked!(headers) do
+      verify_header!(headers, "Transfer-Encoding", "chunked")
+    end
+
+    defp verify_header!(headers, header, expected) do
+      case List.keyfind!(headers, header, 0) do
+        {_, ^expected} ->
+          true
+
+        {_, content_type} ->
+          raise ExAws.Error, "Accepts #{expected}, received #{to_string(content_type)}"
+      end
+    end
   else
     def stream_objects!(_, _, _) do
       raise "Bedrock response streaming requires hackney in your mix dependencies"
+    end
+  end
+
+  @doc false
+  @spec decode_chunk(binary()) :: {:chunk, %{String.t() => term}} | {:bad_chunk, binary, term}
+  def decode_chunk(data) do
+    with <<
+           message_total_length::32,
+           headers_length::32,
+           _prelude_checksum::32,
+           _headers::binary-size(headers_length),
+           body::binary-size(message_total_length - headers_length - 16),
+           _message_checksum::32
+         >> <- data,
+         {:ok, %{"bytes" => bytes}} <- Jason.decode(body),
+         {:ok, json} <- Base.decode64(bytes),
+         {:ok, payload} <- Jason.decode(json) do
+      {:chunk, payload}
+    else
+      {:error, error} ->
+        {:bad_chunk, data, error}
+
+      error ->
+        {:bad_chunk, data, error}
     end
   end
 end

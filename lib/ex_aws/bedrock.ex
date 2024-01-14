@@ -9,6 +9,7 @@ defmodule ExAws.Bedrock do
   """
 
   import ExAws.Bedrock.Strings, only: [camel_case_keys: 1]
+  alias ExAws.Bedrock.EventStream
 
   @json_request_headers [{"Content-Type", "application/json"}]
 
@@ -77,6 +78,47 @@ defmodule ExAws.Bedrock do
   end
 
   @doc """
+  Invoke the specified Amazon Bedrock model to run inference using the input provided,
+  returns the response in a stream.
+
+  To find out if a model supports streaming, call `ExAws.Bedrock.get_foundation_model/1`
+  and check boolean value of `responseStreamingSupported`.
+
+      input = %{
+       "prompt" => "Write me a technical blog post on the advantages of functional programming with Elixir, OTP and the BEAM. Do not repeat code examples.",
+       "temperature" => 0.5,
+       "top_p" => 0.9,
+       "max_gen_len" => 2048
+      }
+
+      request = ExAws.Bedrock.invoke_model_with_response_stream("meta.llama2-70b-chat-v1", input);
+
+      output = (request
+      |> ExAws.Bedrock.stream!()
+      |> Stream.flat_map(fn {:chunk, %{"generation" => s}} -> [s] end)
+      |> Stream.map(fn s -> IO.write(s); s end)
+      |> Enum.to_list())
+
+
+  [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModelWithResponseStream.html)
+
+  [Model Parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters.html)
+  """
+  @spec invoke_model_with_response_stream(String.t(), map | struct) :: Enumerable.t()
+  def invoke_model_with_response_stream(model_id, body) do
+    post =
+      %ExAws.Operation.JSON{
+        data: body,
+        headers: @json_request_headers,
+        http_method: :post,
+        path: "/model/#{model_id}/invoke-with-response-stream",
+        service: :"bedrock-runtime"
+      }
+
+    %{post | stream_builder: &EventStream.stream_objects!(post, nil, &1)}
+  end
+
+  @doc """
   List of Amazon Bedrock foundation models that you can use.
 
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListFoundationModels.html)
@@ -110,4 +152,6 @@ defmodule ExAws.Bedrock do
   defdelegate request(op, config_overrides \\ []), to: ExAws.Bedrock.Request
 
   defdelegate request!(op, config_overrides \\ []), to: ExAws.Bedrock.Request
+
+  defdelegate stream!(op, config_overrides \\ []), to: ExAws.Bedrock.Request
 end
