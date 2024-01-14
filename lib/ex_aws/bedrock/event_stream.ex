@@ -9,8 +9,6 @@ defmodule ExAws.Bedrock.EventStream do
   This requires `hackney` otherwise we will fail at runtime. It also assumes `Jason` is available
   but we can improve this to lookup the ExAws JSON coded.
 
-  Requires `EEP 52` and Elixir 1.14.
-
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ResponseStream.html)
   """
 
@@ -18,8 +16,7 @@ defmodule ExAws.Bedrock.EventStream do
 
   @content_type "application/vnd.amazon.eventstream"
 
-  if Version.compare(System.version(), "1.14.0") in [:gt, :eq] &&
-       {:module, :hackney} == Code.ensure_loaded(:hackney) &&
+  if {:module, :hackney} == Code.ensure_loaded(:hackney) &&
        Kernel.function_exported?(:hackney, :post, 4) do
     @http_ua :hackney_request.default_ua()
     @library_version Application.spec(:ex_aws_bedrock)[:vsn]

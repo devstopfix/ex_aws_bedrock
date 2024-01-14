@@ -13,7 +13,7 @@ defmodule ExAws.Bedrock.MixProject do
       description:
         "The easiest way to build and scale generative AI applications with foundation models",
       docs: [main: @name, source_ref: "v#{@version}", source_url: @url],
-      elixir: "~> 1.12",
+      elixir: "~> 1.14",
       package: package(),
       start_permanent: Mix.env() == :prod,
       version: @version
