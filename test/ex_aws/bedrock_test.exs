@@ -8,6 +8,32 @@ defmodule ExAws.BedrockTest do
   @model_id "amazon.titan-text-lite-v1"
   @prompt "Hello, LLM!"
 
+  describe "get_custom_model/1" do
+    @tag :aws
+    test "unknown from AWS", %{request: get_unknown_model} do
+      assert {:error, {:http_error, 400, _}} = request(get_unknown_model)
+    end
+
+    test "http get", %{request: request} do
+      assert %JSON{http_method: :get} = request
+    end
+
+    test "path", %{model_id: model_id, request: request} do
+      expected_path = "/custom-models/#{model_id}"
+      assert %JSON{path: ^expected_path} = request
+    end
+
+    test "service", %{request: request} do
+      assert %JSON{service: :bedrock} = request
+    end
+
+    setup do
+      model_id = String.reverse(@model_id)
+      request = Bedrock.get_custom_model(model_id)
+      {:ok, [model_id: model_id, request: request]}
+    end
+  end
+
   describe "get_foundation_model/1" do
     @tag :aws
     test "from AWS", %{request: request} do

@@ -13,6 +13,19 @@ defmodule ExAws.Bedrock do
   @json_request_headers [{"Content-Type", "application/json"}]
 
   @doc """
+  Get the properties associated with a Amazon Bedrock custom model that you have created.
+
+  [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetCustomModel.html)
+  """
+  def get_custom_model(model_id) when is_binary(model_id) do
+    %ExAws.Operation.JSON{
+      http_method: :get,
+      path: "/custom-models/" <> model_id,
+      service: :bedrock
+    }
+  end
+
+  @doc """
   Get details about a Amazon Bedrock foundation model.
 
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_GetFoundationModel.html)
