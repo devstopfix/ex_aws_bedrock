@@ -28,7 +28,10 @@ def deps do
 end
 ```
 
-***NOTE*** this requires a minimum `ex_aws` version of 2.5.1.
+***NOTE***:
+
+* this requires a minimum `ex_aws` version of 2.5.1.
+* if you wish to stream responses, please include `hackney`
 
 ## Unit tests
 
