@@ -8,7 +8,7 @@ defmodule ExAws.Bedrock do
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/welcome.html)
   """
 
-  @json_headers [{"Content-Type", "application/json"}]
+  @json_request_headers [{"Content-Type", "application/json"}]
 
   @doc """
   Get details about a Amazon Bedrock foundation model.
@@ -47,11 +47,9 @@ defmodule ExAws.Bedrock do
   @spec invoke_model(String.t(), Jason.Encoder.t()) :: ExAws.Operation.t()
 
   def invoke_model(model_id, inference_parameters) when is_binary(model_id) do
-    {:ok, body} = Jason.encode(inference_parameters)
-
     %ExAws.Operation.JSON{
-      data: body,
-      headers: @json_headers,
+      data: inference_parameters,
+      headers: @json_request_headers,
       http_method: :post,
       path: "/model/#{model_id}/invoke",
       service: :"bedrock-runtime"

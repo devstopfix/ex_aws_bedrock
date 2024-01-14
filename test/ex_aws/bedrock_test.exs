@@ -51,11 +51,6 @@ defmodule ExAws.BedrockTest do
       assert %{"results" => [%{"outputText" => _output} | _]} = request!(request)
     end
 
-    test "body as map" do
-      request = Bedrock.invoke_model(@model_id, %{})
-      assert %JSON{data: "{}"} = request
-    end
-
     test "content type is JSON", %{request: request} do
       assert %JSON{headers: headers} = request
       assert {_, "application/json"} = List.keyfind(headers, "Content-Type", 0)
