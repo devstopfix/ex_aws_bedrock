@@ -1,5 +1,5 @@
 defmodule ExAws.BedrockTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   import ExAws.Bedrock, only: [request: 1, request!: 1]
   alias ExAws.Bedrock
   alias ExAws.Bedrock.Titan.TextModel
