@@ -48,8 +48,7 @@ defmodule ExAws.Bedrock.MixProject do
       {:ex_aws, ">= 2.5.1"},
       {:ex_doc, ">= 0.0.0", only: :dev},
       {:hackney, ">= 0.0.0", only: [:dev, :test]},
-      {:jason, ">= 0.0.0", only: [:dev, :test]},
-      {:sweet_xml, ">= 0.0.0", optional: true}
+      {:jason, ">= 0.1.0", only: [:dev, :test]}
     ]
   end
 end
