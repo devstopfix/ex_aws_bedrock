@@ -1,5 +1,5 @@
 defmodule ExAws.Bedrock.Titan.TextModelTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias ExAws.Bedrock.Titan.{TextGenerationConfig, TextModel}
 

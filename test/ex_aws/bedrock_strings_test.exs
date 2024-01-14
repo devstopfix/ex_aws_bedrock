@@ -1,5 +1,5 @@
 defmodule ExAws.BedrockStringsTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   import ExAws.Bedrock.Strings, only: [camel_case_keys: 1]
 
   describe "camel_case_keys/1" do
