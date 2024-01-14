@@ -3,9 +3,9 @@
 > The easiest way to build and scale generative AI applications with foundation models
 > -- https://aws.amazon.com/bedrock/
 
-
 Service module for [Elixir AWS](https://github.com/ex-aws/ex_aws).
 
+This library supports listing and invoking models of text and images and streaming of responses. Agents are not yet supported.
 
 [![ci](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml/badge.svg)](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/ex_aws_bedrock.svg?style=flat-square)](https://hex.pm/packages/ex_aws_bedrock)
@@ -20,7 +20,7 @@ along with `:ex_aws`, and your preferred HTTP client and JSON codec.
 def deps do
   [
     {:ex_aws, ">= 2.5.1"},
-    {:ex_aws_bedrock, "~> 1.5"},
+    {:ex_aws_bedrock, "~> 2.5"},
     {:hackney, "~> 1.9"},
     {:jason, "~> 1.1"},
     {:poison, "~> 3.0"}
@@ -28,7 +28,10 @@ def deps do
 end
 ```
 
-***NOTE*** this requires a minimum `ex_aws` version of 2.5.1.
+***NOTE***:
+
+* this requires a minimum `ex_aws` version of 2.5.1.
+* if you wish to stream responses, please include `hackney` and `jason`.
 
 ## Unit tests
 

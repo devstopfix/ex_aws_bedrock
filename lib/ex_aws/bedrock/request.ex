@@ -21,6 +21,14 @@ defmodule ExAws.Bedrock.Request do
   def request!(op, config_overrides \\ []),
     do: ExAws.request!(op, check_service_override(op, config_overrides))
 
+  @doc """
+  Return a stream for the AWS resource.
+
+  See `ExAws.stream!/2`.
+  """
+  def stream!(op, config_overrides \\ []),
+    do: ExAws.stream!(op, check_service_override(op, config_overrides))
+
   defp check_service_override(%{service: :"bedrock-runtime"}, config_overrides),
     do: [{:service_override, :bedrock} | config_overrides]
 
