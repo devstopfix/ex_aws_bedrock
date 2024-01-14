@@ -6,13 +6,10 @@
 
 Service module for [Elixir AWS](https://github.com/ex-aws/ex_aws).
 
-***NOTE*** this is a work in progress as the operations are uploaded over the next few days
-and requires a minimum `ex_aws` version of 2.5.1.
 
 [![ci](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml/badge.svg)](https://github.com/devstopfix/ex_aws_bedrock/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/ex_aws_bedrock.svg?style=flat-square)](https://hex.pm/packages/ex_aws_bedrock)
 [![API Docs](https://img.shields.io/badge/api-docs-MediumOrange.svg?style=flat)](https://hexdocs.pm/ex_aws_bedrock/ExAws.Bedrock.html)
-
 
 ## Installation
 
@@ -30,6 +27,8 @@ def deps do
   ]
 end
 ```
+
+***NOTE*** this requires a minimum `ex_aws` version of 2.5.1.
 
 ## Unit tests
 
@@ -56,6 +55,39 @@ in the [model parameters section of the AWS user guide][models]. You can pass
 plain Elixir maps which are then JSON encoded, or define structs which implement
 the encoder protocol of your chosen JSON codec. This library has an example
 under [ExAws.Bedrock.Titan.TextModel](lib/ex_aws/bedrock/titan/text_model.ex).
+
+The Meta models can be invoked with a pure map input:
+
+```elixir
+%{
+    "prompt" => "What is the best AWS client library for the Elixir programming language?",
+    "temperature" => 0.5,
+    "top_p" => 0.9,
+    "max_gen_len" => 80
+}
+```
+
+## Example
+
+Run the example script to sample the models and their quality of responses:
+
+    source .env && mix run examples.exs    
+
+Outputs:
+
+    Asking meta.llama2-70b-chat-v1 "Complete this riddle. Ruby is to Yukihiro Matsumoto as Elixir is to" with temperature=0.8
+
+    Answer: José Valim.
+    Explanation:
+    Ruby is a programming language created by Yukihiro Matsumoto, also known as Matz.
+    Elixir is a programming language created by José Valim, also known as José.
+
+    Therefore, the answer to the riddle is "José Valim".
+
+
+    Asking meta.llama2-70b-chat-v1 "What is the best AWS client library for the Elixir programming language?" with temperature=0.8
+
+    Answer: The best AWS client library for the Elixir programming language is the `ex_aws` library. It is a lightweight, idiomatic Elixir client for AWS services, providing a simple and intuitive API for interacting with AWS.
 
 ## License
 
