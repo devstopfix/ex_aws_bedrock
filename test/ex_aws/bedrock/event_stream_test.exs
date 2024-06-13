@@ -1,12 +1,22 @@
 defmodule ExAws.Bedrock.EventStreamTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias ExAws.Bedrock.EventStream
 
   describe "decode_chunk/1" do
     test "good", %{chunk: chunk} do
-      assert {:chunk, %{"outputText" => output_text}} = EventStream.decode_chunk(chunk)
+      assert [{:chunk, %{"outputText" => output_text}}] = EventStream.decode_chunk(chunk)
       assert String.contains?(output_text, "Elixir")
+    end
+
+    test "handling multiple chunks", %{chunk: chunk} do
+      assert [
+               {:chunk, %{"outputText" => output_text1}},
+               {:chunk, %{"outputText" => output_text2}}
+             ] = EventStream.decode_chunk(chunk <> chunk)
+
+      assert String.contains?(output_text1, "Elixir")
+      assert String.contains?(output_text2, "Elixir")
     end
   end
 

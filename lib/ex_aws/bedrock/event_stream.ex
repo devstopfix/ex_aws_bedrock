@@ -95,7 +95,7 @@ defmodule ExAws.Bedrock.EventStream do
           &Function.identity/1
         )
 
-      Stream.map(stream, &decode_chunk/1)
+      Stream.flat_map(stream, &decode_chunk/1)
     end
 
     defp verify_event_stream!(headers) do
@@ -122,7 +122,7 @@ defmodule ExAws.Bedrock.EventStream do
   end
 
   @doc false
-  @spec decode_chunk(binary()) :: {:chunk, %{String.t() => term}} | {:bad_chunk, binary, term}
+  @spec decode_chunk(binary()) :: [{:chunk, %{String.t() => term}}] | [{:bad_chunk, binary, term}]
   def decode_chunk(data) do
     with <<
            message_total_length::32,
@@ -130,18 +130,22 @@ defmodule ExAws.Bedrock.EventStream do
            _prelude_checksum::32,
            _headers::binary-size(headers_length),
            body::binary-size(message_total_length - headers_length - 16),
-           _message_checksum::32
+           _message_checksum::32,
+           rest::binary
          >> <- data,
          {:ok, %{"bytes" => bytes}} <- Jason.decode(body),
          {:ok, json} <- Base.decode64(bytes),
          {:ok, payload} <- Jason.decode(json) do
-      {:chunk, payload}
+      [{:chunk, payload}] ++ decode_chunk(rest)
     else
+      "" ->
+        []
+
       {:error, error} ->
-        {:bad_chunk, data, error}
+        [{:bad_chunk, data, error}]
 
       error ->
-        {:bad_chunk, data, error}
+        [{:bad_chunk, data, error}]
     end
   end
 end
