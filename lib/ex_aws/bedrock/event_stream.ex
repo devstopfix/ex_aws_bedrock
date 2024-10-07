@@ -95,8 +95,7 @@ defmodule ExAws.Bedrock.EventStream do
           &Function.identity/1
         )
 
-      stream
-      |> Stream.flat_map(&decode_chunk/1)
+      Stream.flat_map(stream, &decode_chunk/1)
     end
 
     defp verify_event_stream!(headers) do
