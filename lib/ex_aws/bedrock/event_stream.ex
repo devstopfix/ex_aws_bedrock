@@ -95,7 +95,8 @@ defmodule ExAws.Bedrock.EventStream do
           &Function.identity/1
         )
 
-      Stream.map(stream, &decode_chunk/1)
+      stream
+      |> Stream.flat_map(&decode_chunk/1)
     end
 
     defp verify_event_stream!(headers) do
@@ -122,26 +123,86 @@ defmodule ExAws.Bedrock.EventStream do
   end
 
   @doc false
-  @spec decode_chunk(binary()) :: {:chunk, %{String.t() => term}} | {:bad_chunk, binary, term}
+  @spec decode_chunk(binary()) :: list({:chunk, map()} | {:bad_chunk, binary(), term()})
   def decode_chunk(data) do
-    with <<
-           message_total_length::32,
-           headers_length::32,
-           _prelude_checksum::32,
+    decode_chunks(data, [])
+  end
+
+  defp decode_chunks(<<>>, acc), do: Enum.reverse(acc)
+
+  defp decode_chunks(data, acc) do
+    case parse_chunk(data) do
+      {:ok, chunk, rest} ->
+        decode_chunks(rest, [{:chunk, chunk} | acc])
+
+      {:error, reason, rest} ->
+        decode_chunks(rest, [{:bad_chunk, data, reason} | acc])
+
+      :incomplete ->
+        # May wish to buffer incomplete data
+        [{:incomplete_chunk, data} | acc]
+    end
+  end
+
+  @uint32_size 4
+  @checksum_size 4
+  # prelude_length = message_total_length + headers_length + prelude_checksum
+  @prelude_length @uint32_size * 3
+  # message_overhead = prelude + message_checksum
+  @message_overhead @prelude_length + @checksum_size
+  defp parse_chunk(
+         <<
+           message_total_length::unsigned-32,
+           headers_length::unsigned-32,
+           _prelude_checksum::unsigned-32,
            _headers::binary-size(headers_length),
-           body::binary-size(message_total_length - headers_length - 16),
-           _message_checksum::32
-         >> <- data,
-         {:ok, %{"bytes" => bytes}} <- Jason.decode(body),
+           rest::binary
+         >> = data
+       )
+       when byte_size(data) >= message_total_length do
+    message_length = message_total_length - @message_overhead
+    body_length = message_length - headers_length
+
+    if byte_size(rest) >= body_length + @checksum_size do
+      <<
+        body::binary-size(body_length),
+        _message_checksum::unsigned-32,
+        next_data::binary
+      >> = rest
+
+      case process_chunk(body) do
+        {:ok, chunk} ->
+          {:ok, chunk, next_data}
+
+        {:error, reason} ->
+          {:error, reason, next_data}
+      end
+    else
+      :incomplete
+    end
+  end
+
+  defp parse_chunk(data) when byte_size(data) < @prelude_length do
+    # Not enough data to read prelude
+    :incomplete
+  end
+
+  defp parse_chunk(_data) do
+    # Invalid chunk
+    {:error, :invalid_chunk, <<>>}
+  end
+
+  defp process_chunk(body) do
+    with {:ok, %{"bytes" => bytes}} <- Jason.decode(body),
          {:ok, json} <- Base.decode64(bytes),
          {:ok, payload} <- Jason.decode(json) do
-      {:chunk, payload}
+      {:ok, payload}
     else
       {:error, error} ->
-        {:bad_chunk, data, error}
+        {:error, error}
 
       error ->
-        {:bad_chunk, data, error}
+        {:error, error}
     end
   end
 end
