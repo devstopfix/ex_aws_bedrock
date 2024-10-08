@@ -3,6 +3,11 @@ defmodule ExAws.Bedrock.EventStreamTest do
 
   alias ExAws.Bedrock.EventStream
 
+  @uint32_size 4
+  @checksum_size 4
+  @prelude_length @uint32_size * 3
+  @message_overhead @prelude_length + @checksum_size
+
   describe "decode_chunk/1" do
     test "should decode single chunk response", %{chunk: chunk} do
       assert [{:chunk, %{"outputText" => output_text}}] = EventStream.decode_chunk(chunk)
@@ -13,9 +18,24 @@ defmodule ExAws.Bedrock.EventStreamTest do
       assert [{:chunk, %{"type" => _}}, {:chunk, %{"type" => _}}] =
                EventStream.decode_chunk(multipart_chunk)
     end
+
+    test "should handle invalid prelude checksum", %{chunk_with_invalid_prelude_checksum: chunk} do
+      assert [{:bad_chunk, ^chunk, :invalid_prelude_checksum}] =
+               EventStream.decode_chunk(chunk)
+    end
+
+    test "should handle invalid message checksum", %{chunk_with_invalid_message_checksum: chunk} do
+      assert [{:bad_chunk, ^chunk, :invalid_message_checksum}] =
+               EventStream.decode_chunk(chunk)
+    end
+
+    test "should handle incomplete chunk", %{incomplete_chunk: chunk} do
+      assert [{:bad_chunk, ^chunk, :invalid_chunk}] = EventStream.decode_chunk(chunk)
+    end
   end
 
   setup_all do
+    # Claude 3.5 Sonnet Multi-Chunk response
     multipart_chunk =
       <<0, 0, 1, 209, 0, 0, 0, 75, 251, 229, 194, 61, 11, 58, 101, 118, 101, 110, 116, 45, 116,
         121, 112, 101, 7, 0, 5, 99, 104, 117, 110, 107, 13, 58, 99, 111, 110, 116, 101, 110, 116,
@@ -91,6 +111,50 @@ defmodule ExAws.Bedrock.EventStreamTest do
         88, 82, 108, 98, 109, 78, 53, 73, 106, 111, 120, 78, 106, 103, 49, 102, 88, 48, 61, 34,
         125, 72, 100, 27, 122>>
 
-    %{chunk: chunk, multipart_chunk: multipart_chunk}
+    # Create a chunk with an invalid prelude checksum
+    chunk_with_invalid_prelude_checksum = alter_prelude_checksum(chunk)
+
+    # Create a chunk with an invalid message checksum
+    chunk_with_invalid_message_checksum = alter_message_checksum(chunk)
+
+    # Create an incomplete chunk by truncating the valid chunk
+    incomplete_chunk = binary_part(chunk, 0, byte_size(chunk) - 10)
+
+    %{
+      chunk: chunk,
+      multipart_chunk: multipart_chunk,
+      chunk_with_invalid_prelude_checksum: chunk_with_invalid_prelude_checksum,
+      chunk_with_invalid_message_checksum: chunk_with_invalid_message_checksum,
+      incomplete_chunk: incomplete_chunk
+    }
+  end
+
+  defp alter_prelude_checksum(chunk) do
+    # Modify the prelude checksum to be invalid
+    <<message_total_length::unsigned-32, headers_length::unsigned-32,
+      _prelude_checksum::unsigned-32, rest::binary>> = chunk
+
+    invalid_prelude_checksum = 0
+
+    <<message_total_length::unsigned-32, headers_length::unsigned-32,
+      invalid_prelude_checksum::unsigned-32, rest::binary>>
+  end
+
+  defp alter_message_checksum(chunk) do
+    # Parse the chunk to extract message parts
+    <<message_total_length::unsigned-32, headers_length::unsigned-32,
+      prelude_checksum::unsigned-32, rest::binary>> = chunk
+
+    message_length = message_total_length - @message_overhead
+    body_length = message_length - headers_length
+
+    <<headers::binary-size(headers_length), body::binary-size(body_length),
+      _message_checksum::unsigned-32>> = rest
+
+    invalid_message_checksum = 0
+
+    <<message_total_length::unsigned-32, headers_length::unsigned-32,
+      prelude_checksum::unsigned-32, headers::binary, body::binary,
+      invalid_message_checksum::unsigned-32>>
   end
 end
