@@ -82,23 +82,21 @@ defmodule ExAws.Bedrock.InvokeModelStreamTest do
     end
 
     setup do
-      model_id = "anthropic.claude-3-sonnet-20240229-v1"
+      model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+      anthropic_version = "bedrock-2023-05-31"
+      prompt = "Write a short story about a dog"
 
       request_body = %{
         "messages" => [
           %{
             "role" => "user",
             "content" => [
-              %{
-                "text" => "Write a short paragraph about functional programming."
-              }
+              %{"text" => prompt, "type" => "text"}
             ]
           }
         ],
-        "inferenceConfig" => %{
-          "maxTokens" => 500,
-          "temperature" => 0.7
-        }
+        "max_tokens" => 500,
+        "anthropic_version" => anthropic_version
       }
 
       request = Bedrock.converse_stream(model_id, request_body)

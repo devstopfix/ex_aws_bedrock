@@ -135,13 +135,11 @@ defmodule ExAws.Bedrock do
           %{"role" => "user", "content" => [%{"text" => "Hello, how are you?"}]}
         ],
         "system" => [%{"text" => "You are a helpful assistant"}],
-        "inferenceConfig" => %{
-          "maxTokens" => 1000,
-          "temperature" => 0.7
-        }
+        "max_tokens" => 500,
+        "anthropic_version" => "bedrock-2023-05-31"
       }
 
-      request = ExAws.Bedrock.converse("anthropic.claude-3-sonnet-20240229-v1", request_body)
+      request = ExAws.Bedrock.converse("us.anthropic.claude-3-7-sonnet-20250219-v1:0", request_body)
       {:ok, response} = ExAws.Bedrock.request(request)
       output_text = get_in(response, ["output", "message", "content", Access.at(0), "text"])
 
@@ -169,16 +167,19 @@ defmodule ExAws.Bedrock do
 
       request_body = %{
         "messages" => [
-          %{"role" => "user", "content" => [%{"text" => "Write a short story about a robot."}]}
-        ]
+          %{"role" => "user", "content" => [%{"text" => "Hello, how are you?"}]}
+        ],
+        "system" => [%{"text" => "You are a helpful assistant"}],
+        "max_tokens" => 500,
+        "anthropic_version" => "bedrock-2023-05-31"
       }
 
       stream = (
-        ExAws.Bedrock.converse_stream("anthropic.claude-3-sonnet-20240229-v1", request_body)
+        ExAws.Bedrock.converse_stream(model_id, request_body)
         |> ExAws.Bedrock.stream!()
-        |> Stream.map(fn chunk ->
+        |> Stream.map(fn {:chunk, chunk} ->
           # Process each chunk of the response
-          IO.write(get_in(chunk, [:body, "chunk", "bytes"]) || "")
+          IO.write(get_in(chunk, ["delta", "text"]) || "")
         end)
         |> Enum.to_list()
       )
