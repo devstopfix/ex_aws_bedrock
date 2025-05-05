@@ -46,4 +46,63 @@ defmodule ExAws.Bedrock.InvokeModelStreamTest do
       {:ok, [model_id: model_id, request: request]}
     end
   end
+
+  describe "converse_stream/2 text" do
+    @tag :aws
+    test "against AWS", %{request: request} do
+      response =
+        request
+        |> stream!()
+        |> Enum.to_list()
+
+      assert [%{} | _] = response
+    end
+
+    test "content type is JSON", %{request: request} do
+      assert %JSON{headers: headers} = request
+      assert {_, "application/json"} = List.keyfind(headers, "Content-Type", 0)
+    end
+
+    test "http post", %{request: request} do
+      assert %{http_method: :post} = request
+    end
+
+    test "path", %{model_id: model_id, request: request} do
+      expected_path = "/model/#{model_id}/converse-stream"
+      assert %JSON{path: ^expected_path} = request
+    end
+
+    test "service", %{request: request} do
+      assert %JSON{service: :"bedrock-runtime"} = request
+    end
+
+    test "has stream_builder", %{request: request} do
+      assert %{stream_builder: stream_builder} = request
+      assert is_function(stream_builder)
+    end
+
+    setup do
+      model_id = "anthropic.claude-3-sonnet-20240229-v1"
+
+      request_body = %{
+        "messages" => [
+          %{
+            "role" => "user",
+            "content" => [
+              %{
+                "text" => "Write a short paragraph about functional programming."
+              }
+            ]
+          }
+        ],
+        "inferenceConfig" => %{
+          "maxTokens" => 500,
+          "temperature" => 0.7
+        }
+      }
+
+      request = Bedrock.converse_stream(model_id, request_body)
+      {:ok, [model_id: model_id, request: request]}
+    end
+  end
 end
