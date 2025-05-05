@@ -24,3 +24,5 @@ ex_aws_bedrock-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+.env
