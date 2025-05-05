@@ -153,8 +153,8 @@ defmodule ExAws.Bedrock.EventStream do
          <<
            message_total_length::unsigned-32,
            headers_length::unsigned-32,
-           _prelude_checksum::unsigned-32,
-           _headers::binary-size(headers_length),
+           prelude_checksum::unsigned-32,
+           headers::binary-size(headers_length),
            rest::binary
          >> = data
        )
@@ -165,16 +165,19 @@ defmodule ExAws.Bedrock.EventStream do
     if byte_size(rest) >= body_length + @checksum_size do
       <<
         body::binary-size(body_length),
-        _message_checksum::unsigned-32,
+        message_checksum::unsigned-32,
         next_data::binary
       >> = rest
 
-      case process_chunk(body) do
-        {:ok, chunk} ->
-          {:ok, chunk, next_data}
+      prelude = <<message_total_length::unsigned-32, headers_length::unsigned-32>>
 
-        {:error, reason} ->
-          {:error, reason, next_data}
+      with :ok <- verify_prelude_checksum(prelude, prelude_checksum),
+           :ok <-
+             verify_message_checksum(prelude, prelude_checksum, headers, body, message_checksum),
+           {:ok, chunk} <- process_chunk(body) do
+        {:ok, chunk, next_data}
+      else
+        {:error, reason} -> {:error, reason, next_data}
       end
     else
       :incomplete
@@ -182,13 +185,33 @@ defmodule ExAws.Bedrock.EventStream do
   end
 
   defp parse_chunk(data) when byte_size(data) < @prelude_length do
-    # Not enough data to read prelude
     :incomplete
   end
 
   defp parse_chunk(_data) do
-    # Invalid chunk
     {:error, :invalid_chunk, <<>>}
+  end
+
+  defp verify_prelude_checksum(prelude, checksum) do
+    if crc32(prelude) == checksum do
+      :ok
+    else
+      {:error, :invalid_prelude_checksum}
+    end
+  end
+
+  defp verify_message_checksum(prelude, prelude_checksum, headers, body, checksum) do
+    message = prelude <> <<prelude_checksum::unsigned-32>> <> headers <> body
+
+    if crc32(message) == checksum do
+      :ok
+    else
+      {:error, :invalid_message_checksum}
+    end
+  end
+
+  defp crc32(data) do
+    :erlang.crc32(data)
   end
 
   defp process_chunk(body) do
