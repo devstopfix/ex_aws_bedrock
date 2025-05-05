@@ -215,15 +215,19 @@ defmodule ExAws.Bedrock.EventStream do
   end
 
   defp process_chunk(body) do
-    with {:ok, %{"bytes" => bytes}} <- Jason.decode(body),
-         {:ok, json} <- Base.decode64(bytes),
-         {:ok, payload} <- Jason.decode(json) do
-      {:ok, payload}
-    else
-      {:error, error} ->
-        {:error, error}
+    case Jason.decode(body) do
+      # Format for invoke_model_with_response_stream
+      {:ok, %{"bytes" => bytes}} ->
+        with {:ok, json} <- Base.decode64(bytes),
+             {:ok, payload} <- Jason.decode(json) do
+          {:ok, payload}
+        end
 
-      error ->
+      # Format for converse_stream - direct JSON without base64 encoding
+      {:ok, payload} ->
+        {:ok, payload}
+
+      {:error, error} ->
         {:error, error}
     end
   end

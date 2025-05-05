@@ -55,7 +55,7 @@ defmodule ExAws.Bedrock.InvokeModelStreamTest do
         |> stream!()
         |> Enum.to_list()
 
-      assert [%{} | _] = response
+      assert [{:chunk, _} | _] = response
     end
 
     test "content type is JSON", %{request: request} do
