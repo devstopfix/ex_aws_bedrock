@@ -163,7 +163,7 @@ defmodule ExAws.Bedrock do
   chunks of the model's response in real time. This is ideal for displaying responses
   incrementally as they're generated.
 
-  ## Example
+  ## Example - Basic Usage
 
       request_body = %{
         "messages" => [
@@ -183,6 +183,73 @@ defmodule ExAws.Bedrock do
         end)
         |> Enum.to_list()
       )
+
+  ## Example - Using Tools
+
+      system_prompt = "Always use the tool top_song."
+
+      model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+      anthropic_version = "bedrock-2023-05-31"
+      prompt = "Find the most popular song for me on the station WZPZ"
+
+      request_body = %{
+        anthropic_version: anthropic_version,
+        max_tokens: 500,
+        temperature: 0.5,
+        top_p: 0.9,
+        system: [%{text: system_prompt, type: "text"}],
+        messages: [
+          %{role: "user", content: [
+              %{text: prompt, type: "text"}
+            ]}
+        ],
+        toolConfig: %{
+          tools: [
+            %{
+              toolSpec: %{
+                name: "top_song",
+                description: "Get the most popular song played on a radio station.",
+                inputSchema: %{
+                  json: %{
+                    type: "object",
+                    properties: %{
+                      sign: %{
+                        type: "string",
+                        description: "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ and WKRP."
+                      }
+                    },
+                    required: [
+                      "sign"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+
+      new_stream = ExAws.Bedrock.converse_stream(model_id, request_body)
+      stream = ExAws.Bedrock.stream!(new_stream)
+      for event <- stream do
+        IO.puts(inspect(event))
+      end
+
+      # Example output:
+      # {:chunk, %{"messageStart" => %{"role" => "assistant"}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 0, "delta" => %{"text" => "I'll"}}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 0, "delta" => %{"text" => " help"}}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 0, "delta" => %{"text" => " you find the most"}}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 0, "delta" => %{"text" => " popular song on"}}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 0, "delta" => %{"text" => " the radio station"}}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 0, "delta" => %{"text" => " WZPZ."}}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 0, "delta" => %{"text" => " Let"}}}}
+      # {:chunk, %{"contentBlockStop" => %{"contentBlockIndex" => 0}}}
+      # {:chunk, %{"contentBlockStart" => %{"contentBlockIndex" => 1, "start" => %{"toolUse" => %{"name" => "top_song", "toolUseId" => "tooluse_m5eQCV9vRCmgvHj6yF8zHQ"}}}}}
+      # {:chunk, %{"contentBlockDelta" => %{"contentBlockIndex" => 1, "delta" => %{"toolUse" => %{"input" => "{\"sign\": \"WZPZ\"}"}}}}}
+      # {:chunk, %{"contentBlockStop" => %{"contentBlockIndex" => 1}}}
+      # {:chunk, %{"messageStop" => %{"stopReason" => "tool_use"}}}
+      # {:chunk, %{"metadata" => %{"metrics" => %{"latencyMs" => 1940}, "usage" => %{"inputTokens" => 436, "outputTokens" => 66, "totalTokens" => 502}}}}
 
   [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html)
   """
