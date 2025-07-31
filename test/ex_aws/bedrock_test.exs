@@ -188,4 +188,73 @@ defmodule ExAws.BedrockTest do
       {:ok, [request: request]}
     end
   end
+
+  describe "converse/2" do
+    test "content type is JSON", %{request: request} do
+      assert %JSON{headers: headers} = request
+      assert {_, "application/json"} = List.keyfind(headers, "Content-Type", 0)
+    end
+
+    test "http post", %{request: request} do
+      assert %JSON{http_method: :post} = request
+    end
+
+    test "path", %{request: request} do
+      assert %JSON{path: "/model/anthropic.claude-3-sonnet-20240229-v1/converse"} = request
+    end
+
+    test "service", %{request: request} do
+      assert %JSON{service: :"bedrock-runtime"} = request
+    end
+
+    setup do
+      model_id = "anthropic.claude-3-sonnet-20240229-v1"
+
+      request_body = %{
+        "messages" => [
+          %{"role" => "user", "content" => [%{"text" => "Hello"}]}
+        ]
+      }
+
+      request = Bedrock.converse(model_id, request_body)
+      {:ok, [request: request, model_id: model_id]}
+    end
+  end
+
+  describe "converse_stream/2" do
+    test "content type is JSON", %{request: request} do
+      assert %JSON{headers: headers} = request
+      assert {_, "application/json"} = List.keyfind(headers, "Content-Type", 0)
+    end
+
+    test "http post", %{request: request} do
+      assert %JSON{http_method: :post} = request
+    end
+
+    test "path", %{request: request} do
+      assert %JSON{path: "/model/anthropic.claude-3-sonnet-20240229-v1/converse-stream"} = request
+    end
+
+    test "service", %{request: request} do
+      assert %JSON{service: :"bedrock-runtime"} = request
+    end
+
+    test "has stream_builder", %{request: request} do
+      assert %JSON{stream_builder: stream_builder} = request
+      assert is_function(stream_builder)
+    end
+
+    setup do
+      model_id = "anthropic.claude-3-sonnet-20240229-v1"
+
+      request_body = %{
+        "messages" => [
+          %{"role" => "user", "content" => [%{"text" => "Hello"}]}
+        ]
+      }
+
+      request = Bedrock.converse_stream(model_id, request_body)
+      {:ok, [request: request, model_id: model_id]}
+    end
+  end
 end

@@ -36,7 +36,7 @@ defmodule ExAws.Bedrock.EventStream do
 
     [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ResponseStream.html)
     """
-    def stream_objects!(%{service: service, data: data} = post_operation, _opts, config) do
+    def stream_objects!(%{service: service, data: data} = post_operation, opts, config) do
       encoded_data = Jason.encode!(data)
       url = build_request_url(post_operation, config)
       config = Map.put(config, :service_override, :bedrock)
@@ -51,8 +51,11 @@ defmodule ExAws.Bedrock.EventStream do
           encoded_data
         )
 
+      # Extract HTTP options and build hackney options with timeout configurations
+      hackney_options = build_hackney_options(config, opts)
+
       request_fun = fn [] ->
-        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, @hackney_options)
+        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, hackney_options)
 
         receive do
           {:hackney_response, ^ref, {:status, 200, _reason}} ->
@@ -153,8 +156,8 @@ defmodule ExAws.Bedrock.EventStream do
          <<
            message_total_length::unsigned-32,
            headers_length::unsigned-32,
-           _prelude_checksum::unsigned-32,
-           _headers::binary-size(headers_length),
+           prelude_checksum::unsigned-32,
+           headers::binary-size(headers_length),
            rest::binary
          >> = data
        )
@@ -165,16 +168,19 @@ defmodule ExAws.Bedrock.EventStream do
     if byte_size(rest) >= body_length + @checksum_size do
       <<
         body::binary-size(body_length),
-        _message_checksum::unsigned-32,
+        message_checksum::unsigned-32,
         next_data::binary
       >> = rest
 
-      case process_chunk(body) do
-        {:ok, chunk} ->
-          {:ok, chunk, next_data}
+      prelude = <<message_total_length::unsigned-32, headers_length::unsigned-32>>
 
-        {:error, reason} ->
-          {:error, reason, next_data}
+      with :ok <- verify_prelude_checksum(prelude, prelude_checksum),
+           :ok <-
+             verify_message_checksum(prelude, prelude_checksum, headers, body, message_checksum),
+           {:ok, chunk} <- process_chunk(body) do
+        {:ok, chunk, next_data}
+      else
+        {:error, reason} -> {:error, reason, next_data}
       end
     else
       :incomplete
@@ -182,26 +188,144 @@ defmodule ExAws.Bedrock.EventStream do
   end
 
   defp parse_chunk(data) when byte_size(data) < @prelude_length do
-    # Not enough data to read prelude
     :incomplete
   end
 
   defp parse_chunk(_data) do
-    # Invalid chunk
     {:error, :invalid_chunk, <<>>}
   end
 
-  defp process_chunk(body) do
-    with {:ok, %{"bytes" => bytes}} <- Jason.decode(body),
-         {:ok, json} <- Base.decode64(bytes),
-         {:ok, payload} <- Jason.decode(json) do
-      {:ok, payload}
+  defp verify_prelude_checksum(prelude, checksum) do
+    if crc32(prelude) == checksum do
+      :ok
     else
+      {:error, :invalid_prelude_checksum}
+    end
+  end
+
+  defp verify_message_checksum(prelude, prelude_checksum, headers, body, checksum) do
+    message = prelude <> <<prelude_checksum::unsigned-32>> <> headers <> body
+
+    if crc32(message) == checksum do
+      :ok
+    else
+      {:error, :invalid_message_checksum}
+    end
+  end
+
+  defp crc32(data) do
+    :erlang.crc32(data)
+  end
+
+  defp process_chunk(body) do
+    case Jason.decode(body) do
+      # Format for invoke_model_with_response_stream
+      {:ok, %{"bytes" => bytes}} ->
+        with {:ok, json} <- Base.decode64(bytes),
+             {:ok, payload} <- Jason.decode(json) do
+          {:ok, payload}
+        end
+
+      # Process converse_stream events - simple direct transformation
+      {:ok, payload} when is_map(payload) ->
+        process_converse_chunk(payload)
+
+      # Format for other direct JSON without base64 encoding
+      {:ok, payload} ->
+        {:ok, payload}
+
       {:error, error} ->
         {:error, error}
-
-      error ->
-        {:error, error}
     end
+  end
+
+  @doc false
+  @spec process_converse_chunk(map()) :: {:ok, map()}
+  defp process_converse_chunk(payload) do
+    # First remove the "p" field which is internal metadata
+    payload = Map.drop(payload, ["p"])
+
+    # Map the AWS event format to the expected output structure
+    processed_payload =
+      case payload do
+        # Message start event
+        %{"role" => "assistant"} ->
+          %{"messageStart" => %{"role" => "assistant"}}
+
+        # Content block delta with text
+        %{"contentBlockIndex" => index, "delta" => %{"text" => text}} ->
+          %{"contentBlockDelta" => %{"delta" => %{"text" => text}, "contentBlockIndex" => index}}
+
+        # Content block delta with tool use
+        %{"contentBlockIndex" => index, "delta" => %{"toolUse" => tool_use}} ->
+          %{
+            "contentBlockDelta" => %{
+              "delta" => %{"toolUse" => tool_use},
+              "contentBlockIndex" => index
+            }
+          }
+
+        # Content block start
+        %{"contentBlockIndex" => index, "start" => start} ->
+          %{"contentBlockStart" => %{"start" => start, "contentBlockIndex" => index}}
+
+        # Content block stop
+        %{"contentBlockIndex" => index}
+        when not is_map_key(payload, "delta") and not is_map_key(payload, "start") ->
+          %{"contentBlockStop" => %{"contentBlockIndex" => index}}
+
+        # Message stop
+        %{"stopReason" => reason} ->
+          %{"messageStop" => %{"stopReason" => reason}}
+
+        # Metadata
+        %{"usage" => usage, "metrics" => metrics} ->
+          %{"metadata" => %{"usage" => usage, "metrics" => metrics}}
+
+        # Other events pass through unchanged
+        _ ->
+          payload
+      end
+
+    {:ok, processed_payload}
+  end
+
+  # Build hackney options by merging base options with HTTP timeout configurations
+  defp build_hackney_options(config, opts) do
+    # Start with base options
+    base_options = @hackney_options
+
+    # Extract HTTP options from ExAws config
+    http_opts = get_http_opts(config, opts)
+
+    # Extract timeout-related options and convert to hackney format
+    timeout_options = extract_timeout_options(http_opts)
+
+    # Merge all options, with timeout_options taking precedence
+    base_options ++ timeout_options
+  end
+
+  # Get HTTP options from config and opts, with opts taking precedence
+  defp get_http_opts(config, opts) do
+    config_http_opts = Map.get(config, :http_opts, [])
+
+    opts_http_opts =
+      case opts do
+        nil -> []
+        opts when is_list(opts) -> Keyword.get(opts, :http_opts, [])
+        _ -> []
+      end
+
+    # Merge config options with opts, opts taking precedence
+    Keyword.merge(config_http_opts, opts_http_opts)
+  end
+
+  # Extract timeout options that hackney understands
+  defp extract_timeout_options(http_opts) do
+    timeout_keys = [:connect_timeout, :recv_timeout, :timeout]
+
+    timeout_keys
+    |> Enum.filter(fn key -> Keyword.has_key?(http_opts, key) end)
+    |> Enum.map(fn key -> {key, Keyword.get(http_opts, key)} end)
   end
 end
