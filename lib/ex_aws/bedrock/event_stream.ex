@@ -36,7 +36,7 @@ defmodule ExAws.Bedrock.EventStream do
 
     [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ResponseStream.html)
     """
-    def stream_objects!(%{service: service, data: data} = post_operation, _opts, config) do
+    def stream_objects!(%{service: service, data: data} = post_operation, opts, config) do
       encoded_data = Jason.encode!(data)
       url = build_request_url(post_operation, config)
       config = Map.put(config, :service_override, :bedrock)
@@ -51,8 +51,11 @@ defmodule ExAws.Bedrock.EventStream do
           encoded_data
         )
 
+      # Extract HTTP options and build hackney options with timeout configurations
+      hackney_options = build_hackney_options(config, opts)
+
       request_fun = fn [] ->
-        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, @hackney_options)
+        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, hackney_options)
 
         receive do
           {:hackney_response, ^ref, {:status, 200, _reason}} ->
@@ -285,5 +288,44 @@ defmodule ExAws.Bedrock.EventStream do
       end
 
     {:ok, processed_payload}
+  end
+
+  # Build hackney options by merging base options with HTTP timeout configurations
+  defp build_hackney_options(config, opts) do
+    # Start with base options
+    base_options = @hackney_options
+
+    # Extract HTTP options from ExAws config
+    http_opts = get_http_opts(config, opts)
+
+    # Extract timeout-related options and convert to hackney format
+    timeout_options = extract_timeout_options(http_opts)
+
+    # Merge all options, with timeout_options taking precedence
+    base_options ++ timeout_options
+  end
+
+  # Get HTTP options from config and opts, with opts taking precedence
+  defp get_http_opts(config, opts) do
+    config_http_opts = Map.get(config, :http_opts, [])
+
+    opts_http_opts =
+      case opts do
+        nil -> []
+        opts when is_list(opts) -> Keyword.get(opts, :http_opts, [])
+        _ -> []
+      end
+
+    # Merge config options with opts, opts taking precedence
+    Keyword.merge(config_http_opts, opts_http_opts)
+  end
+
+  # Extract timeout options that hackney understands
+  defp extract_timeout_options(http_opts) do
+    timeout_keys = [:connect_timeout, :recv_timeout, :timeout]
+
+    timeout_keys
+    |> Enum.filter(fn key -> Keyword.has_key?(http_opts, key) end)
+    |> Enum.map(fn key -> {key, Keyword.get(http_opts, key)} end)
   end
 end
