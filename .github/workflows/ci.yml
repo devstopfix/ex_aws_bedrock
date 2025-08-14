@@ -22,6 +22,9 @@ jobs:
             elixir: 1.15.x
           - otp: 27.x
             elixir: 1.16.x
+        include:
+          - otp: 28.x
+            elixir: 1.18.x
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
