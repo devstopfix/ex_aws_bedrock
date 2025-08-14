@@ -7,24 +7,29 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        otp: [24.x, 25.x, 26.x, 27.x]
-        elixir: [1.14.x, 1.15.x, 1.16.x, 1.17.x, 1.18.x]
+        otp: [24.x, 25.x, 26.x, 27.x, 28.x]
+        elixir: [1.15.x, 1.16.x, 1.17.x, 1.18.x, 1.19.x]
         exclude:
-          - otp: 24.x
-            elixir: 1.17.x
-          - otp: 24.x
-            elixir: 1.18.x
-          - otp: 26.x
-            elixir: 1.14.x
-          - otp: 27.x
-            elixir: 1.14.x
-          - otp: 27.x
-            elixir: 1.15.x
-          - otp: 27.x
-            elixir: 1.16.x
-        include:
-          - otp: 28.x
-            elixir: 1.18.x
+          - elixir: 1.15.x
+            otp: 27.x
+          - elixir: 1.15.x
+            otp: 28.x
+          - elixir: 1.16.x
+            otp: 27.x
+          - elixir: 1.16.x
+            otp: 28.x
+          - elixir: 1.17.x
+            otp: 24.x
+          - elixir: 1.17.x
+            otp: 28.x
+          - elixir: 1.18.x
+            otp: 24.x
+          - elixir: 1.18.x
+            otp: 28.x
+          - elixir: 1.19.x
+            otp: 24.x
+          - elixir: 1.19.x
+            otp: 25.x
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
@@ -36,7 +41,7 @@ jobs:
       - run: mix format --check-formatted
         if: matrix.elixir == '1.18.x'
       - run: mix credo --strict
-        if: matrix.elixir == '1.18.x'
+        if: matrix.elixir == '1.18.x' && matrix.otp == '27.x'
       - run: mix dialyzer
         if: matrix.elixir == '1.18.x' && matrix.otp == '27.x'
       - run: mix test
