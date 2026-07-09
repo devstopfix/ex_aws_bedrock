@@ -18,7 +18,13 @@ defmodule ExAws.Bedrock.EventStream do
 
   if {:module, :hackney} == Code.ensure_loaded(:hackney) &&
        Kernel.function_exported?(:hackney, :post, 4) do
-    @http_ua :hackney_request.default_ua()
+    # hackney >= 4 moved default_ua/0 from :hackney_request to :hackney
+    if function_exported?(:hackney, :default_ua, 0) do
+      @http_ua :hackney.default_ua()
+    else
+      @http_ua :hackney_request.default_ua()
+    end
+
     @library_version Application.spec(:ex_aws_bedrock)[:vsn]
     @user_agent "#{@http_ua} ex_aws/bedrock/#{@library_version}"
     @headers [
