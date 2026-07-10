@@ -34,6 +34,31 @@ defmodule ExAws.Bedrock.EventStreamTest do
     end
   end
 
+  describe "hackney_options/1" do
+    test "defaults to async streaming options when no http_opts are given" do
+      assert EventStream.hackney_options(%{}) == [async: :once]
+    end
+
+    test "honors caller recv_timeout / connect_timeout / pool from :http_opts" do
+      opts =
+        EventStream.hackney_options(%{
+          http_opts: [recv_timeout: 600_000, connect_timeout: 10_000, pool: :ex_aws]
+        })
+
+      assert Keyword.get(opts, :async) == :once
+      assert Keyword.get(opts, :recv_timeout) == 600_000
+      assert Keyword.get(opts, :connect_timeout) == 10_000
+      assert Keyword.get(opts, :pool) == :ex_aws
+    end
+
+    test "streaming defaults win so async: :once cannot be disabled by caller opts" do
+      opts = EventStream.hackney_options(%{http_opts: [async: false, recv_timeout: 1_000]})
+
+      assert Keyword.get(opts, :async) == :once
+      assert Keyword.get(opts, :recv_timeout) == 1_000
+    end
+  end
+
   setup_all do
     # Claude 3.5 Sonnet Multi-Chunk response
     multipart_chunk =

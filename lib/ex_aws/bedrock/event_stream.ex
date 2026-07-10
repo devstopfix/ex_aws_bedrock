@@ -57,8 +57,10 @@ defmodule ExAws.Bedrock.EventStream do
           encoded_data
         )
 
+      hackney_opts = hackney_options(config)
+
       request_fun = fn [] ->
-        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, @hackney_options)
+        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, hackney_opts)
 
         receive do
           {:hackney_response, ^ref, {:status, 200, _reason}} ->
@@ -102,6 +104,24 @@ defmodule ExAws.Bedrock.EventStream do
         )
 
       Stream.flat_map(stream, &decode_chunk/1)
+    end
+
+    @doc """
+    Builds the hackney options for the streaming request.
+
+    Merges caller-provided options from the ExAws config `:http_opts` (e.g.
+    `recv_timeout`, `connect_timeout`, `pool`) on top of the async-streaming
+    defaults. Without this, the stream would always use hackney's built-in
+    `recv_timeout` (5s) and drop slow responses regardless of the timeout the
+    caller configured.
+
+    The streaming defaults win on conflicting keys, so the async-streaming mode
+    (`async: :once`) can't be accidentally disabled by caller options.
+    """
+    def hackney_options(config) do
+      config
+      |> Map.get(:http_opts, [])
+      |> Keyword.merge(@hackney_options)
     end
 
     defp verify_event_stream!(headers) do
