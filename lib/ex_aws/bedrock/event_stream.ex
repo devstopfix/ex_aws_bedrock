@@ -33,7 +33,11 @@ defmodule ExAws.Bedrock.EventStream do
       {"user-agent", @user_agent},
       {"x-amzn-bedrock-accept", "*/*"}
     ]
-    @hackney_options [{:async, :once}]
+    # :protocols forces HTTP/1.1: hackney >= 4 negotiates HTTP/2 via ALPN by
+    # default, but its h2 path does not deliver async body messages, so the
+    # event stream would hang waiting for chunks that never arrive. HTTP/1.1
+    # also guarantees the chunked transfer-encoding this module verifies.
+    @hackney_options [{:async, :once}, {:protocols, [:http1]}]
 
     @doc """
     Stream of chunks from the response stream.
@@ -57,8 +61,10 @@ defmodule ExAws.Bedrock.EventStream do
           encoded_data
         )
 
+      hackney_opts = hackney_options(config)
+
       request_fun = fn [] ->
-        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, @hackney_options)
+        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, hackney_opts)
 
         receive do
           {:hackney_response, ^ref, {:status, 200, _reason}} ->
@@ -69,6 +75,9 @@ defmodule ExAws.Bedrock.EventStream do
 
           {:hackney_response, ^ref, {:error, {:closed, :timeout}}} ->
             :closed
+
+          {:hackney_response, ^ref, {:error, reason}} ->
+            raise ExAws.Error, "Bedrock stream request failed: #{inspect(reason)}"
         end
       end
 
@@ -82,7 +91,9 @@ defmodule ExAws.Bedrock.EventStream do
             {:error, status, reason} ->
               raise ExAws.Error, "#{to_string(status)}: #{to_string(reason)}"
 
-            ref when is_reference(ref) ->
+            # hackney < 4 identifies async responses by reference,
+            # hackney >= 4 by the connection pid.
+            ref when is_reference(ref) or is_pid(ref) ->
               :ok = :hackney.stream_next(ref)
 
               receive do
@@ -94,7 +105,10 @@ defmodule ExAws.Bedrock.EventStream do
                 {:hackney_response, ^ref, :done} ->
                   {:halt, []}
 
-                {:hackney_response, ^ref, data} ->
+                {:hackney_response, ^ref, {:error, reason}} ->
+                  raise ExAws.Error, "Bedrock stream failed mid-stream: #{inspect(reason)}"
+
+                {:hackney_response, ^ref, data} when is_binary(data) ->
                   {[data], ref}
               end
           end,
@@ -102,6 +116,25 @@ defmodule ExAws.Bedrock.EventStream do
         )
 
       Stream.flat_map(stream, &decode_chunk/1)
+    end
+
+    @doc """
+    Builds the hackney options for the streaming request.
+
+    Merges caller-provided options from the ExAws config `:http_opts` (e.g.
+    `recv_timeout`, `connect_timeout`, `pool`) on top of the async-streaming
+    defaults. Without this, the stream would always use hackney's built-in
+    `recv_timeout` (5s) and drop slow responses regardless of the timeout the
+    caller configured.
+
+    The streaming defaults win on conflicting keys, so the async-streaming mode
+    (`async: :once`) and the forced HTTP/1.1 protocol can't be accidentally
+    disabled by caller options.
+    """
+    def hackney_options(config) do
+      config
+      |> Map.get(:http_opts, [])
+      |> Keyword.merge(@hackney_options)
     end
 
     defp verify_event_stream!(headers) do
