@@ -110,6 +110,10 @@ defmodule ExAws.Bedrock.EventStream do
 
                 {:hackney_response, ^ref, data} when is_binary(data) ->
                   {[data], ref}
+
+                {:hackney_response, ^ref, other} ->
+                  raise ExAws.Error,
+                        "Bedrock stream received unexpected message: #{inspect(other)}"
               end
           end,
           &Function.identity/1
