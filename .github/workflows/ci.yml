@@ -30,7 +30,7 @@ jobs:
       - run: mix format --check-formatted
         if: matrix.elixir == '1.19.x'
       - run: mix credo --strict
-        if: matrix.elixir == '1.19.x' && matrix.otp == '29.x'
+        if: matrix.elixir == '1.19.x' && matrix.otp == '28.x'
       - run: mix dialyzer
-        if: matrix.elixir == '1.19.x' && matrix.otp == '29.x'
+        if: matrix.elixir == '1.19.x' && matrix.otp == '28.x'
       - run: mix test
