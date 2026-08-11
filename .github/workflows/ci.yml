@@ -32,5 +32,5 @@ jobs:
       - run: mix credo --strict
         if: matrix.elixir == '1.19.x' && matrix.otp == '29.x'
       - run: mix dialyzer
-        if: matrix.elixir == '1.19.x' && matrix.otp == '2.x'
+        if: matrix.elixir == '1.19.x' && matrix.otp == '29.x'
       - run: mix test
