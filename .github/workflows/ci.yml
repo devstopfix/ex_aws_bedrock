@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         otp: [28.x, 29.x]
-        elixir: [1.17.x, 1.18.x, 1.19.x]
+        elixir: [1.18.x, 1.19.x]
         include:
           - elixir: 1.16.x
             otp: 26.x
