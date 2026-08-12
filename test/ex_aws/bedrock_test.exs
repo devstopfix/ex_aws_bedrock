@@ -147,7 +147,7 @@ defmodule ExAws.BedrockTest do
     test "allow fine tuning" do
       request = Bedrock.list_foundation_models(by_customization_type: :FINE_TUNING)
 
-      assert %{"modelSummaries" => [%{"customizationsSupported" => ["FINE_TUNING"]} | _]} =
+      assert %{"modelSummaries" => [%{"customizationsSupported" => ["FINE_TUNING" | _]} | _]} =
                request!(request)
     end
 
