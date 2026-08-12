@@ -49,7 +49,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/foundation-models/amazon.titan-text-lite-v1"} = request
+      assert %JSON{path: "/foundation-models/amazon.titan-text-express-v1"} = request
     end
 
     test "service", %{request: request} do
@@ -87,7 +87,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/model/amazon.titan-text-lite-v1/invoke"} = request
+      assert %JSON{path: "/model/amazon.titan-text-express-v1/invoke"} = request
     end
 
     test "service", %{request: request} do
