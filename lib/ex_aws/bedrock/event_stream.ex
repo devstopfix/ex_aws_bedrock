@@ -207,7 +207,7 @@ defmodule ExAws.Bedrock.EventStream do
 
     if byte_size(rest) >= body_length + @checksum_size do
       <<
-        body::binary-size(body_length),
+        body::binary-size(^body_length),
         message_checksum::unsigned-32,
         next_data::binary
       >> = rest
