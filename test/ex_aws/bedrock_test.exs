@@ -5,7 +5,7 @@ defmodule ExAws.BedrockTest do
   alias ExAws.Bedrock.Titan.TextModel
   alias ExAws.Operation.JSON
 
-  @model_id "amazon.titan-text-express-v1"
+  @model_id "amazon.nova-micro-v1:0"
   @prompt "Hello, LLM!"
 
   describe "get_custom_model/1" do
