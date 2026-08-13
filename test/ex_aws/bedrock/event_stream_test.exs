@@ -177,7 +177,7 @@ defmodule ExAws.Bedrock.EventStreamTest do
     message_length = message_total_length - @message_overhead
     body_length = message_length - headers_length
 
-    <<headers::binary-size(headers_length), body::binary-size(body_length),
+    <<headers::binary-size(^headers_length), body::binary-size(^body_length),
       _message_checksum::unsigned-32>> = rest
 
     invalid_message_checksum = 0

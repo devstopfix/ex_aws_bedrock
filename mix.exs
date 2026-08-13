@@ -1,7 +1,7 @@
 defmodule ExAws.Bedrock.MixProject do
   use Mix.Project
 
-  @version "2.6.0"
+  @version "2.7.0"
   @service "bedrock"
   @url "https://github.com/devstopfix/ex_aws_#{@service}"
   @name "ExAws.Bedrock"
