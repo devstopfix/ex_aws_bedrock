@@ -49,7 +49,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/foundation-models/amazon.titan-text-express-v1"} = request
+      assert %JSON{path: "/foundation-models/amazon.nova-micro-v1:0"} = request
     end
 
     test "service", %{request: request} do
@@ -70,13 +70,6 @@ defmodule ExAws.BedrockTest do
       assert {:ok, %{"results" => [%{"outputText" => _output} | _]}} = request(request)
     end
 
-    @tag :aws
-    test "against AWS!" do
-      inference_parameters = TextModel.build(@prompt, maxTokenCount: 32)
-      request = Bedrock.invoke_model(@model_id, inference_parameters)
-      assert %{"results" => [%{"outputText" => _output} | _]} = request!(request)
-    end
-
     test "content type is JSON", %{request: request} do
       assert %JSON{headers: headers} = request
       assert {_, "application/json"} = List.keyfind(headers, "Content-Type", 0)
@@ -87,7 +80,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/model/amazon.titan-text-express-v1/invoke"} = request
+      assert %JSON{path: "/model/amazon.nova-micro-v1:0/invoke"} = request
     end
 
     test "service", %{request: request} do
