@@ -31,8 +31,7 @@ defmodule ExAws.Bedrock.Nova.Content do
   def video_s3(format, uri, bucket_owner \\ nil)
       when format in ~w(mkv mov mp4 webm three_gp flv mpeg mpg wmv) do
     s3_loc =
-      %{uri: uri}
-      |> then(fn map ->
+      then(%{uri: uri}, fn map ->
         if bucket_owner, do: Map.put(map, :bucketOwner, bucket_owner), else: map
       end)
 
@@ -59,8 +58,7 @@ defmodule ExAws.Bedrock.Nova.Content do
   def audio_s3(format, uri, bucket_owner \\ nil)
       when format in ~w(mp3 opus wav aac flac mp4 ogg mkv) do
     s3_loc =
-      %{uri: uri}
-      |> then(fn map ->
+      then(%{uri: uri}, fn map ->
         if bucket_owner, do: Map.put(map, :bucketOwner, bucket_owner), else: map
       end)
 

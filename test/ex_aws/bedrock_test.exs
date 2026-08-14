@@ -76,7 +76,8 @@ defmodule ExAws.BedrockTest do
 
       request = Bedrock.invoke_model(@model_id, inference_parameters)
 
-      assert {:ok, %{"output" => %{"message" => %{"content" => [%{"text" => _}]}}}} = request(request)
+      assert {:ok, %{"output" => %{"message" => %{"content" => [%{"text" => _}]}}}} =
+               request(request)
     end
 
     test "content type is JSON", %{request: request} do
