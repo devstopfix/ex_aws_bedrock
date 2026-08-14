@@ -2,6 +2,7 @@ defmodule ExAws.BedrockTest do
   use ExUnit.Case, async: true
   import ExAws.Bedrock, only: [request: 1, request!: 1]
   alias ExAws.Bedrock
+  alias ExAws.Bedrock.Nova.{Message, TextModel}
   alias ExAws.Bedrock.Titan.TextModel
   alias ExAws.Operation.JSON
 
@@ -65,9 +66,17 @@ defmodule ExAws.BedrockTest do
   describe "invoke_model/2 text" do
     @tag :aws
     test "against AWS" do
-      inference_parameters = TextModel.build(@prompt, maxTokenCount: 32)
+      # inference_parameters = TextModel.build(@prompt, maxTokenCount: 32)
+      inference_parameters =
+        TextModel.build(
+          [Message.user("Hello Amazon Nova!")],
+          system: "You are a helpful Elixir assistant.",
+          inference_config: [temperature: 0.5, max_tokens: 32]
+        )
+
       request = Bedrock.invoke_model(@model_id, inference_parameters)
-      assert {:ok, %{"results" => [%{"outputText" => _output} | _]}} = request(request)
+
+      assert {:ok, %{"output" => %{"message" => %{"content" => [%{"text" => _}]}}}} = request(request)
     end
 
     test "content type is JSON", %{request: request} do
