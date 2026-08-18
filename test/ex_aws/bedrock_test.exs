@@ -5,7 +5,7 @@ defmodule ExAws.BedrockTest do
   alias ExAws.Bedrock.Titan.TextModel
   alias ExAws.Operation.JSON
 
-  @model_id "amazon.titan-text-lite-v1"
+  @model_id "amazon.titan-text-express-v1"
   @prompt "Hello, LLM!"
 
   describe "get_custom_model/1" do
@@ -49,7 +49,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/foundation-models/amazon.titan-text-lite-v1"} = request
+      assert %JSON{path: "/foundation-models/amazon.titan-text-express-v1"} = request
     end
 
     test "service", %{request: request} do
@@ -87,7 +87,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/model/amazon.titan-text-lite-v1/invoke"} = request
+      assert %JSON{path: "/model/amazon.titan-text-express-v1/invoke"} = request
     end
 
     test "service", %{request: request} do
@@ -147,7 +147,7 @@ defmodule ExAws.BedrockTest do
     test "allow fine tuning" do
       request = Bedrock.list_foundation_models(by_customization_type: :FINE_TUNING)
 
-      assert %{"modelSummaries" => [%{"customizationsSupported" => ["FINE_TUNING"]} | _]} =
+      assert %{"modelSummaries" => [%{"customizationsSupported" => ["FINE_TUNING" | _]} | _]} =
                request!(request)
     end
 
