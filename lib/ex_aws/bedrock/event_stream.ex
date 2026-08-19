@@ -15,6 +15,7 @@ defmodule ExAws.Bedrock.EventStream do
   defdelegate build_request_url(post_operation, config), to: ExAws.Request.Url, as: :build
 
   @content_type "application/vnd.amazon.eventstream"
+  @error_body_limit 2_000
 
   if {:module, :hackney} == Code.ensure_loaded(:hackney) &&
        Kernel.function_exported?(:hackney, :post, 4) do
@@ -32,7 +33,8 @@ defmodule ExAws.Bedrock.EventStream do
     @doc """
     Stream of chunks from the response stream.
 
-    Raises on any error.
+    Raises `ExAws.Bedrock.HttpError` on non-200 responses and `ExAws.Error`
+    on protocol errors.
 
     [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ResponseStream.html)
     """
@@ -126,7 +128,13 @@ defmodule ExAws.Bedrock.EventStream do
           {headers, drained_body(chunks)}
 
         {:hackney_response, ^ref, data} when is_binary(data) ->
-          drain(ref, headers, [data | chunks])
+          chunks = [data | chunks]
+
+          if IO.iodata_length(chunks) >= @error_body_limit do
+            {headers, drained_body(chunks)}
+          else
+            drain(ref, headers, chunks)
+          end
       after
         @drain_receive_timeout -> {headers, drained_body(chunks)}
       end
@@ -179,13 +187,11 @@ defmodule ExAws.Bedrock.EventStream do
     decode_chunks(data, [])
   end
 
-  @error_body_limit 2_000
-
   @doc false
   # Builds the structured error from a drained non-200 response.
   def build_http_error(status, headers, body) do
     error_type = extract_error_type(headers)
-    truncated = binary_part(body, 0, min(byte_size(body), @error_body_limit))
+    truncated = truncate_body(body)
     type_part = if error_type, do: " (#{error_type})", else: ""
 
     %ExAws.Bedrock.HttpError{
@@ -193,6 +199,22 @@ defmodule ExAws.Bedrock.EventStream do
       error_type: error_type,
       message: "Bedrock HTTP #{status}#{type_part}: #{truncated}"
     }
+  end
+
+  defp truncate_body(body) do
+    body
+    |> binary_part(0, min(byte_size(body), @error_body_limit))
+    |> utf8_trim(3)
+  end
+
+  # A cut at the byte limit can split a multibyte codepoint; trailing-byte
+  # trims repair a boundary split, inspect/1 covers wholesale non-UTF-8.
+  defp utf8_trim(binary, attempts_left) do
+    cond do
+      String.valid?(binary) -> binary
+      attempts_left == 0 or byte_size(binary) == 0 -> inspect(binary)
+      true -> utf8_trim(binary_part(binary, 0, byte_size(binary) - 1), attempts_left - 1)
+    end
   end
 
   defp extract_error_type(headers) do
@@ -208,6 +230,10 @@ defmodule ExAws.Bedrock.EventStream do
     |> hd()
     |> String.split("#")
     |> List.last()
+    |> case do
+      "" -> nil
+      type -> type
+    end
   end
 
   defp decode_chunks(<<>>, acc), do: Enum.reverse(acc)
