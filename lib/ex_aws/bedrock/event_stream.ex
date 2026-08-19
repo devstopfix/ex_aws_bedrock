@@ -61,8 +61,8 @@ defmodule ExAws.Bedrock.EventStream do
           {:hackney_response, ^ref, {:status, 200, _reason}} ->
             ref
 
-          {:hackney_response, ^ref, {:status, status, reason}} ->
-            {:error, status, reason}
+          {:hackney_response, ^ref, {:status, status, _reason}} ->
+            {:error_status, ref, status}
 
           {:hackney_response, ^ref, {:error, {:closed, :timeout}}} ->
             :closed
@@ -74,10 +74,10 @@ defmodule ExAws.Bedrock.EventStream do
           fn -> request_fun.([]) end,
           fn
             :closed ->
-              {:halt, []}
+              {:halt, :closed}
 
-            {:error, status, reason} ->
-              raise ExAws.Error, "#{to_string(status)}: #{to_string(reason)}"
+            {:error_status, ref, status} ->
+              read_error_response(ref, status)
 
             ref when is_reference(ref) ->
               :ok = :hackney.stream_next(ref)
@@ -89,16 +89,65 @@ defmodule ExAws.Bedrock.EventStream do
                   {[], ref}
 
                 {:hackney_response, ^ref, :done} ->
-                  {:halt, []}
+                  {:halt, :done}
 
                 {:hackney_response, ^ref, data} ->
                   {[data], ref}
               end
           end,
-          &Function.identity/1
+          &close_acc/1
         )
 
       Stream.flat_map(stream, &decode_chunk/1)
+    end
+
+    @doc false
+    # Drains the error response (headers + body, bounded receives), closes the
+    # request, and raises a structured HttpError.
+    def read_error_response(ref, status) do
+      {headers, body} = drain(ref, [], [])
+      safe_close(ref)
+      raise build_http_error(status, headers, body)
+    end
+
+    @drain_receive_timeout 5_000
+
+    defp drain(ref, headers, chunks) do
+      _ = safe_stream_next(ref)
+
+      receive do
+        {:hackney_response, ^ref, {:headers, new_headers}} ->
+          drain(ref, new_headers, chunks)
+
+        {:hackney_response, ^ref, :done} ->
+          {headers, drained_body(chunks)}
+
+        {:hackney_response, ^ref, {:error, _reason}} ->
+          {headers, drained_body(chunks)}
+
+        {:hackney_response, ^ref, data} when is_binary(data) ->
+          drain(ref, headers, [data | chunks])
+      after
+        @drain_receive_timeout -> {headers, drained_body(chunks)}
+      end
+    end
+
+    defp drained_body(chunks), do: chunks |> Enum.reverse() |> IO.iodata_to_binary()
+
+    defp close_acc(ref) when is_reference(ref), do: safe_close(ref)
+    defp close_acc({:error_status, ref, _status}), do: safe_close(ref)
+    defp close_acc(_finished), do: :ok
+
+    defp safe_stream_next(ref) do
+      :hackney.stream_next(ref)
+    catch
+      _, _ -> :error
+    end
+
+    defp safe_close(ref) do
+      :hackney.close(ref)
+    catch
+      _, _ -> :error
     end
 
     defp verify_event_stream!(headers) do
@@ -128,6 +177,37 @@ defmodule ExAws.Bedrock.EventStream do
   @spec decode_chunk(binary()) :: list({:chunk, map()} | {:bad_chunk, binary(), term()})
   def decode_chunk(data) do
     decode_chunks(data, [])
+  end
+
+  @error_body_limit 2_000
+
+  @doc false
+  # Builds the structured error from a drained non-200 response.
+  def build_http_error(status, headers, body) do
+    error_type = extract_error_type(headers)
+    truncated = binary_part(body, 0, min(byte_size(body), @error_body_limit))
+    type_part = if error_type, do: " (#{error_type})", else: ""
+
+    %ExAws.Bedrock.HttpError{
+      status: status,
+      error_type: error_type,
+      message: "Bedrock HTTP #{status}#{type_part}: #{truncated}"
+    }
+  end
+
+  defp extract_error_type(headers) do
+    Enum.find_value(headers, fn {name, value} ->
+      if String.downcase(to_string(name)) == "x-amzn-errortype", do: normalize_error_type(value)
+    end)
+  end
+
+  defp normalize_error_type(value) do
+    value
+    |> to_string()
+    |> String.split(":", parts: 2)
+    |> hd()
+    |> String.split("#")
+    |> List.last()
   end
 
   defp decode_chunks(<<>>, acc), do: Enum.reverse(acc)
