@@ -15,6 +15,7 @@ defmodule ExAws.Bedrock.EventStream do
   defdelegate build_request_url(post_operation, config), to: ExAws.Request.Url, as: :build
 
   @content_type "application/vnd.amazon.eventstream"
+  @error_body_limit 2_000
 
   if {:module, :hackney} == Code.ensure_loaded(:hackney) &&
        Kernel.function_exported?(:hackney, :post, 4) do
@@ -32,7 +33,8 @@ defmodule ExAws.Bedrock.EventStream do
     @doc """
     Stream of chunks from the response stream.
 
-    Raises on any error.
+    Raises `ExAws.Bedrock.HttpError` on non-200 responses and `ExAws.Error`
+    on protocol errors.
 
     [AWS API Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ResponseStream.html)
     """
@@ -54,51 +56,111 @@ defmodule ExAws.Bedrock.EventStream do
       # Extract HTTP options and build hackney options with timeout configurations
       hackney_options = build_hackney_options(config, opts)
 
-      request_fun = fn [] ->
-        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, hackney_options)
-
-        receive do
-          {:hackney_response, ^ref, {:status, 200, _reason}} ->
-            ref
-
-          {:hackney_response, ^ref, {:status, status, reason}} ->
-            {:error, status, reason}
-
-          {:hackney_response, ^ref, {:error, {:closed, :timeout}}} ->
-            :closed
-        end
-      end
-
       stream =
         Stream.resource(
-          fn -> request_fun.([]) end,
-          fn
-            :closed ->
-              {:halt, []}
-
-            {:error, status, reason} ->
-              raise ExAws.Error, "#{to_string(status)}: #{to_string(reason)}"
-
-            ref when is_reference(ref) ->
-              :ok = :hackney.stream_next(ref)
-
-              receive do
-                {:hackney_response, ^ref, {:headers, headers}} ->
-                  verify_event_stream!(headers)
-                  verify_chunked!(headers)
-                  {[], ref}
-
-                {:hackney_response, ^ref, :done} ->
-                  {:halt, []}
-
-                {:hackney_response, ^ref, data} ->
-                  {[data], ref}
-              end
-          end,
-          &Function.identity/1
+          fn -> open_stream(url, full_headers, encoded_data, hackney_options) end,
+          &next_event/1,
+          &close_acc/1
         )
 
       Stream.flat_map(stream, &decode_chunk/1)
+    end
+
+    defp open_stream(url, headers, body, hackney_options) do
+      {:ok, ref} = :hackney.post(url, headers, body, hackney_options)
+      await_status(ref)
+    end
+
+    defp await_status(ref) do
+      receive do
+        {:hackney_response, ^ref, {:status, 200, _reason}} ->
+          ref
+
+        {:hackney_response, ^ref, {:status, status, _reason}} ->
+          {:error_status, ref, status}
+
+        {:hackney_response, ^ref, {:error, {:closed, :timeout}}} ->
+          :closed
+      end
+    end
+
+    defp next_event(:closed), do: {:halt, :closed}
+
+    defp next_event({:error_status, ref, status}), do: read_error_response(ref, status)
+
+    defp next_event(ref) when is_reference(ref) do
+      :ok = :hackney.stream_next(ref)
+      await_event(ref)
+    end
+
+    defp await_event(ref) do
+      receive do
+        {:hackney_response, ^ref, {:headers, headers}} ->
+          verify_event_stream!(headers)
+          verify_chunked!(headers)
+          {[], ref}
+
+        {:hackney_response, ^ref, :done} ->
+          {:halt, :done}
+
+        {:hackney_response, ^ref, data} ->
+          {[data], ref}
+      end
+    end
+
+    @doc false
+    # Drains the error response (headers + body, bounded receives), closes the
+    # request, and raises a structured HttpError.
+    def read_error_response(ref, status) do
+      {headers, body} = drain(ref, [], [])
+      safe_close(ref)
+      raise build_http_error(status, headers, body)
+    end
+
+    @drain_receive_timeout 5_000
+
+    defp drain(ref, headers, chunks) do
+      _ = safe_stream_next(ref)
+
+      receive do
+        {:hackney_response, ^ref, {:headers, new_headers}} ->
+          drain(ref, new_headers, chunks)
+
+        {:hackney_response, ^ref, :done} ->
+          {headers, drained_body(chunks)}
+
+        {:hackney_response, ^ref, {:error, _reason}} ->
+          {headers, drained_body(chunks)}
+
+        {:hackney_response, ^ref, data} when is_binary(data) ->
+          chunks = [data | chunks]
+
+          if IO.iodata_length(chunks) >= @error_body_limit do
+            {headers, drained_body(chunks)}
+          else
+            drain(ref, headers, chunks)
+          end
+      after
+        @drain_receive_timeout -> {headers, drained_body(chunks)}
+      end
+    end
+
+    defp drained_body(chunks), do: chunks |> Enum.reverse() |> IO.iodata_to_binary()
+
+    defp close_acc(ref) when is_reference(ref), do: safe_close(ref)
+    defp close_acc({:error_status, ref, _status}), do: safe_close(ref)
+    defp close_acc(_finished), do: :ok
+
+    defp safe_stream_next(ref) do
+      :hackney.stream_next(ref)
+    catch
+      _, _ -> :error
+    end
+
+    defp safe_close(ref) do
+      :hackney.close(ref)
+    catch
+      _, _ -> :error
     end
 
     defp verify_event_stream!(headers) do
@@ -128,6 +190,55 @@ defmodule ExAws.Bedrock.EventStream do
   @spec decode_chunk(binary()) :: list({:chunk, map()} | {:bad_chunk, binary(), term()})
   def decode_chunk(data) do
     decode_chunks(data, [])
+  end
+
+  @doc false
+  # Builds the structured error from a drained non-200 response.
+  def build_http_error(status, headers, body) do
+    error_type = extract_error_type(headers)
+    truncated = truncate_body(body)
+    type_part = if error_type, do: " (#{error_type})", else: ""
+
+    %ExAws.Bedrock.HttpError{
+      status: status,
+      error_type: error_type,
+      message: "Bedrock HTTP #{status}#{type_part}: #{truncated}"
+    }
+  end
+
+  defp truncate_body(body) do
+    body
+    |> binary_part(0, min(byte_size(body), @error_body_limit))
+    |> utf8_trim(3)
+  end
+
+  # A cut at the byte limit can split a multibyte codepoint; trailing-byte
+  # trims repair a boundary split, inspect/1 covers wholesale non-UTF-8.
+  defp utf8_trim(binary, attempts_left) do
+    cond do
+      String.valid?(binary) -> binary
+      attempts_left == 0 or byte_size(binary) == 0 -> inspect(binary)
+      true -> utf8_trim(binary_part(binary, 0, byte_size(binary) - 1), attempts_left - 1)
+    end
+  end
+
+  defp extract_error_type(headers) do
+    Enum.find_value(headers, fn {name, value} ->
+      if String.downcase(to_string(name)) == "x-amzn-errortype", do: normalize_error_type(value)
+    end)
+  end
+
+  defp normalize_error_type(value) do
+    value
+    |> to_string()
+    |> String.split(":", parts: 2)
+    |> hd()
+    |> String.split("#")
+    |> List.last()
+    |> case do
+      "" -> nil
+      type -> type
+    end
   end
 
   defp decode_chunks(<<>>, acc), do: Enum.reverse(acc)
