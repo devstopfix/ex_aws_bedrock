@@ -56,12 +56,14 @@ defmodule ExAws.Bedrock.EventStream do
       # Extract HTTP options and build hackney options with timeout configurations
       hackney_options = build_hackney_options(config, opts)
 
-      Stream.resource(
-        fn -> open_stream(url, full_headers, encoded_data, hackney_options) end,
-        &next_event/1,
-        &close_acc/1
-      )
-      |> Stream.flat_map(&decode_chunk/1)
+      stream =
+        Stream.resource(
+          fn -> open_stream(url, full_headers, encoded_data, hackney_options) end,
+          &next_event/1,
+          &close_acc/1
+        )
+
+      Stream.flat_map(stream, &decode_chunk/1)
     end
 
     defp open_stream(url, headers, body, hackney_options) do
