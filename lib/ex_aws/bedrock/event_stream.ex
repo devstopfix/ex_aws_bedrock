@@ -56,51 +56,54 @@ defmodule ExAws.Bedrock.EventStream do
       # Extract HTTP options and build hackney options with timeout configurations
       hackney_options = build_hackney_options(config, opts)
 
-      request_fun = fn [] ->
-        {:ok, ref} = :hackney.post(url, full_headers, encoded_data, hackney_options)
+      Stream.resource(
+        fn -> open_stream(url, full_headers, encoded_data, hackney_options) end,
+        &next_event/1,
+        &close_acc/1
+      )
+      |> Stream.flat_map(&decode_chunk/1)
+    end
 
-        receive do
-          {:hackney_response, ^ref, {:status, 200, _reason}} ->
-            ref
+    defp open_stream(url, headers, body, hackney_options) do
+      {:ok, ref} = :hackney.post(url, headers, body, hackney_options)
+      await_status(ref)
+    end
 
-          {:hackney_response, ^ref, {:status, status, _reason}} ->
-            {:error_status, ref, status}
+    defp await_status(ref) do
+      receive do
+        {:hackney_response, ^ref, {:status, 200, _reason}} ->
+          ref
 
-          {:hackney_response, ^ref, {:error, {:closed, :timeout}}} ->
-            :closed
-        end
+        {:hackney_response, ^ref, {:status, status, _reason}} ->
+          {:error_status, ref, status}
+
+        {:hackney_response, ^ref, {:error, {:closed, :timeout}}} ->
+          :closed
       end
+    end
 
-      stream =
-        Stream.resource(
-          fn -> request_fun.([]) end,
-          fn
-            :closed ->
-              {:halt, :closed}
+    defp next_event(:closed), do: {:halt, :closed}
 
-            {:error_status, ref, status} ->
-              read_error_response(ref, status)
+    defp next_event({:error_status, ref, status}), do: read_error_response(ref, status)
 
-            ref when is_reference(ref) ->
-              :ok = :hackney.stream_next(ref)
+    defp next_event(ref) when is_reference(ref) do
+      :ok = :hackney.stream_next(ref)
+      await_event(ref)
+    end
 
-              receive do
-                {:hackney_response, ^ref, {:headers, headers}} ->
-                  verify_event_stream!(headers)
-                  verify_chunked!(headers)
-                  {[], ref}
+    defp await_event(ref) do
+      receive do
+        {:hackney_response, ^ref, {:headers, headers}} ->
+          verify_event_stream!(headers)
+          verify_chunked!(headers)
+          {[], ref}
 
-                {:hackney_response, ^ref, :done} ->
-                  {:halt, :done}
+        {:hackney_response, ^ref, :done} ->
+          {:halt, :done}
 
-                {:hackney_response, ^ref, data} ->
-                  {[data], ref}
-              end
-          end,
-          &close_acc/1
-        )
-
-      Stream.flat_map(stream, &decode_chunk/1)
+        {:hackney_response, ^ref, data} ->
+          {[data], ref}
+      end
     end
 
     @doc false
