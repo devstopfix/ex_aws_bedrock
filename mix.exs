@@ -29,9 +29,10 @@ defmodule ExAws.Bedrock.MixProject do
         Bedrock: "https://aws.amazon.com/bedrock/",
         ExAws: "https://hex.pm/packages/ex_aws",
         Docs: "https://hexdocs.pm/ex_aws_bedrock/#{@version}",
-        GitHub: @url
+        GitHub: @url,
+        Pushin: "https://pushin.eu/devstopfix/ex_aws_bedrock"
       },
-      maintainers: ["J Every"]
+      maintainers: ["J Every", "Michel Boaventura", "Steven Holdsworth"]
     ]
   end
 
