@@ -57,7 +57,7 @@ defmodule ExAws.Bedrock.InvokeModelImageTest do
   end
 
   defp setup_image_model(_) do
-    [model_id: "amazon.titan-image-generator-v1"]
+    [model_id: "amazon.titan-image-generator-v2:0"]
   end
 
   defp setup_image_size(_) do

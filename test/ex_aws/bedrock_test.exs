@@ -2,10 +2,11 @@ defmodule ExAws.BedrockTest do
   use ExUnit.Case, async: true
   import ExAws.Bedrock, only: [request: 1, request!: 1]
   alias ExAws.Bedrock
+  alias ExAws.Bedrock.Nova.{Message, TextModel}
   alias ExAws.Bedrock.Titan.TextModel
   alias ExAws.Operation.JSON
 
-  @model_id "amazon.titan-text-lite-v1"
+  @model_id "amazon.nova-micro-v1:0"
   @prompt "Hello, LLM!"
 
   describe "get_custom_model/1" do
@@ -49,7 +50,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/foundation-models/amazon.titan-text-lite-v1"} = request
+      assert %JSON{path: "/foundation-models/amazon.nova-micro-v1:0"} = request
     end
 
     test "service", %{request: request} do
@@ -65,16 +66,18 @@ defmodule ExAws.BedrockTest do
   describe "invoke_model/2 text" do
     @tag :aws
     test "against AWS" do
-      inference_parameters = TextModel.build(@prompt, maxTokenCount: 32)
-      request = Bedrock.invoke_model(@model_id, inference_parameters)
-      assert {:ok, %{"results" => [%{"outputText" => _output} | _]}} = request(request)
-    end
+      # inference_parameters = TextModel.build(@prompt, maxTokenCount: 32)
+      inference_parameters =
+        TextModel.build(
+          [Message.user("Hello Amazon Nova!")],
+          system: "You are a helpful Elixir assistant.",
+          inference_config: [temperature: 0.5, max_tokens: 32]
+        )
 
-    @tag :aws
-    test "against AWS!" do
-      inference_parameters = TextModel.build(@prompt, maxTokenCount: 32)
       request = Bedrock.invoke_model(@model_id, inference_parameters)
-      assert %{"results" => [%{"outputText" => _output} | _]} = request!(request)
+
+      assert {:ok, %{"output" => %{"message" => %{"content" => [%{"text" => _}]}}}} =
+               request(request)
     end
 
     test "content type is JSON", %{request: request} do
@@ -87,7 +90,7 @@ defmodule ExAws.BedrockTest do
     end
 
     test "path", %{request: request} do
-      assert %JSON{path: "/model/amazon.titan-text-lite-v1/invoke"} = request
+      assert %JSON{path: "/model/amazon.nova-micro-v1:0/invoke"} = request
     end
 
     test "service", %{request: request} do
@@ -147,7 +150,7 @@ defmodule ExAws.BedrockTest do
     test "allow fine tuning" do
       request = Bedrock.list_foundation_models(by_customization_type: :FINE_TUNING)
 
-      assert %{"modelSummaries" => [%{"customizationsSupported" => ["FINE_TUNING"]} | _]} =
+      assert %{"modelSummaries" => [%{"customizationsSupported" => ["FINE_TUNING" | _]} | _]} =
                request!(request)
     end
 
