@@ -34,6 +34,66 @@ defmodule ExAws.Bedrock.EventStreamTest do
     end
   end
 
+  describe "decode_stream/1" do
+    test "should decode a message split at any byte offset", %{chunk: chunk} do
+      expected = EventStream.decode_chunk(chunk)
+      assert [{:chunk, _}] = expected
+
+      for offset <- 0..byte_size(chunk) do
+        <<head::binary-size(^offset), tail::binary>> = chunk
+
+        assert expected == decode_stream([head, tail]), "split at byte #{offset}"
+      end
+    end
+
+    test "should decode multiple messages split at any byte offset", %{
+      multipart_chunk: multipart_chunk
+    } do
+      expected = EventStream.decode_chunk(multipart_chunk)
+      assert [{:chunk, _}, {:chunk, _}] = expected
+
+      for offset <- 0..byte_size(multipart_chunk) do
+        <<head::binary-size(^offset), tail::binary>> = multipart_chunk
+
+        assert expected == decode_stream([head, tail]), "split at byte #{offset}"
+      end
+    end
+
+    test "should decode messages delivered one byte at a time", %{
+      multipart_chunk: multipart_chunk
+    } do
+      bytes = for <<byte <- multipart_chunk>>, do: <<byte>>
+
+      assert EventStream.decode_chunk(multipart_chunk) == decode_stream(bytes)
+    end
+
+    test "should emit each message as soon as it is complete", %{chunk: chunk} do
+      <<head::binary-size(10), tail::binary>> = chunk
+
+      assert [{:chunk, _}] =
+               [chunk, head, tail]
+               |> Stream.concat(Stream.repeatedly(fn -> flunk("stream read too far") end))
+               |> EventStream.decode_stream()
+               |> Enum.take(1)
+    end
+
+    test "should continue after a message with an invalid checksum", %{
+      chunk: chunk,
+      chunk_with_invalid_message_checksum: bad_chunk
+    } do
+      <<head::binary-size(100), tail::binary>> = bad_chunk <> chunk
+
+      assert [{:bad_chunk, ^bad_chunk, :invalid_message_checksum}, {:chunk, _}] =
+               decode_stream([head, tail])
+    end
+
+    test "should raise when the stream ends inside a message", %{incomplete_chunk: chunk} do
+      assert_raise ExAws.Error, ~r/incomplete message/, fn ->
+        decode_stream([chunk])
+      end
+    end
+  end
+
   describe "hackney_options/1" do
     test "defaults to async streaming over HTTP/1.1 when no http_opts are given" do
       assert EventStream.hackney_options(%{}) == [async: :once, protocols: [:http1]]
@@ -156,6 +216,12 @@ defmodule ExAws.Bedrock.EventStreamTest do
       chunk_with_invalid_message_checksum: chunk_with_invalid_message_checksum,
       incomplete_chunk: incomplete_chunk
     }
+  end
+
+  defp decode_stream(binaries) do
+    binaries
+    |> EventStream.decode_stream()
+    |> Enum.to_list()
   end
 
   defp alter_prelude_checksum(chunk) do
