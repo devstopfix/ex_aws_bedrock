@@ -188,13 +188,19 @@ defmodule ExAws.Bedrock.EventStream do
   # chunk.
   @spec decode_stream(Enumerable.t()) :: Enumerable.t()
   def decode_stream(stream) do
-    Stream.transform(
-      stream,
-      fn -> <<>> end,
-      fn data, buffer -> decode_messages(buffer <> data, []) end,
-      fn buffer -> {leftover(buffer), <<>>} end,
-      fn _buffer -> :ok end
-    )
+    # Runs once, before the first binary: nothing is buffered yet.
+    empty_buffer = fn -> <<>> end
+
+    # Runs for every binary: emit the whole messages, keep the rest buffered.
+    decode_binary = fn data, buffer -> decode_messages(buffer <> data, []) end
+
+    # Runs once, after the last binary: report bytes that never made a message.
+    report_leftover = fn buffer -> {leftover(buffer), <<>>} end
+
+    # Runs last, also when the consumer stops early: nothing to clean up.
+    no_cleanup = fn _buffer -> :ok end
+
+    Stream.transform(stream, empty_buffer, decode_binary, report_leftover, no_cleanup)
   end
 
   @doc false
