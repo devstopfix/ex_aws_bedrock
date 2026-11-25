@@ -203,13 +203,6 @@ defmodule ExAws.Bedrock.EventStream do
     Stream.transform(stream, empty_buffer, decode_binary, report_leftover, no_cleanup)
   end
 
-  @doc false
-  @spec decode_chunk(binary()) :: list(decoded() | {:incomplete_chunk, binary()})
-  def decode_chunk(data) do
-    {chunks, rest} = decode_messages(data, [])
-    chunks ++ leftover(rest)
-  end
-
   # Bytes that do not make up a whole message once there is no more data.
   defp leftover(<<>>), do: []
 

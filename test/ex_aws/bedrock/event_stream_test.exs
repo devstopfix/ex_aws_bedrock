@@ -10,35 +10,35 @@ defmodule ExAws.Bedrock.EventStreamTest do
   @max_headers_length 128 * 1024
   @max_payload_length 24 * 1024 * 1024
 
-  describe "decode_chunk/1" do
+  describe "decode_stream/1 with a single binary" do
     test "should decode single chunk response", %{chunk: chunk} do
-      assert [{:chunk, %{"outputText" => output_text}}] = EventStream.decode_chunk(chunk)
+      assert [{:chunk, %{"outputText" => output_text}}] = decode_stream([chunk])
       assert String.contains?(output_text, "Elixir")
     end
 
     test "should decode multiple chunks in single response", %{multipart_chunk: multipart_chunk} do
       assert [{:chunk, %{"type" => _}}, {:chunk, %{"type" => _}}] =
-               EventStream.decode_chunk(multipart_chunk)
+               decode_stream([multipart_chunk])
     end
 
     test "should handle invalid prelude checksum", %{chunk_with_invalid_prelude_checksum: chunk} do
       assert [{:bad_chunk, ^chunk, :invalid_prelude_checksum}] =
-               EventStream.decode_chunk(chunk)
+               decode_stream([chunk])
     end
 
     test "should handle invalid message checksum", %{chunk_with_invalid_message_checksum: chunk} do
       assert [{:bad_chunk, ^chunk, :invalid_message_checksum}] =
-               EventStream.decode_chunk(chunk)
+               decode_stream([chunk])
     end
 
     test "should handle incomplete chunk", %{incomplete_chunk: chunk} do
-      assert [{:bad_chunk, ^chunk, :invalid_chunk}] = EventStream.decode_chunk(chunk)
+      assert [{:bad_chunk, ^chunk, :invalid_chunk}] = decode_stream([chunk])
     end
   end
 
   describe "decode_stream/1" do
     test "should decode a message split at any byte offset", %{chunk: chunk} do
-      expected = EventStream.decode_chunk(chunk)
+      expected = decode_stream([chunk])
       assert [{:chunk, _}] = expected
 
       for offset <- 0..byte_size(chunk) do
@@ -51,7 +51,7 @@ defmodule ExAws.Bedrock.EventStreamTest do
     test "should decode multiple messages split at any byte offset", %{
       multipart_chunk: multipart_chunk
     } do
-      expected = EventStream.decode_chunk(multipart_chunk)
+      expected = decode_stream([multipart_chunk])
       assert [{:chunk, _}, {:chunk, _}] = expected
 
       for offset <- 0..byte_size(multipart_chunk) do
@@ -66,7 +66,7 @@ defmodule ExAws.Bedrock.EventStreamTest do
     } do
       bytes = for <<byte <- multipart_chunk>>, do: <<byte>>
 
-      assert EventStream.decode_chunk(multipart_chunk) == decode_stream(bytes)
+      assert decode_stream([multipart_chunk]) == decode_stream(bytes)
     end
 
     test "should emit each message as soon as it is complete", %{chunk: chunk} do
