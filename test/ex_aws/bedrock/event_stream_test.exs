@@ -89,10 +89,18 @@ defmodule ExAws.Bedrock.EventStreamTest do
                decode_stream([head, tail])
     end
 
-    test "should raise when the stream ends inside a message", %{incomplete_chunk: chunk} do
-      assert_raise ExAws.Error, ~r/incomplete message/, fn ->
-        decode_stream([chunk])
-      end
+    test "should report a stream that ends inside a message", %{
+      chunk: chunk,
+      incomplete_chunk: incomplete_chunk
+    } do
+      assert [{:chunk, _}, {:bad_chunk, ^incomplete_chunk, :invalid_chunk}] =
+               decode_stream([chunk, incomplete_chunk])
+    end
+
+    test "should report a stream that ends inside a prelude", %{chunk: chunk} do
+      <<head::binary-size(5), _::binary>> = chunk
+
+      assert [{:chunk, _}, {:incomplete_chunk, ^head}] = decode_stream([chunk, head])
     end
 
     test "should reject a message over the payload limit without buffering it" do
@@ -110,9 +118,7 @@ defmodule ExAws.Bedrock.EventStreamTest do
     test "should wait for a message at the payload and headers limits" do
       prelude = prelude(@max_payload_length, @max_headers_length)
 
-      assert_raise ExAws.Error, ~r/incomplete message/, fn ->
-        decode_stream([prelude])
-      end
+      assert [{:bad_chunk, ^prelude, :invalid_chunk}] = decode_stream([prelude])
     end
   end
 

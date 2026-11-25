@@ -184,21 +184,15 @@ defmodule ExAws.Bedrock.EventStream do
   # messages: a message may be split across any number of binaries. Bytes are
   # buffered until the message length declared in the prelude has arrived.
   #
-  # Raises if the stream ends in the middle of a message.
+  # Bytes left over when the stream ends are reported as a bad or incomplete
+  # chunk.
   @spec decode_stream(Enumerable.t()) :: Enumerable.t()
   def decode_stream(stream) do
     Stream.transform(
       stream,
       fn -> <<>> end,
       fn data, buffer -> decode_messages(buffer <> data, []) end,
-      fn
-        <<>> ->
-          {[], <<>>}
-
-        buffer ->
-          raise ExAws.Error,
-                "Bedrock stream ended with #{byte_size(buffer)} bytes of an incomplete message"
-      end,
+      fn buffer -> {leftover(buffer), <<>>} end,
       fn _buffer -> :ok end
     )
   end
@@ -206,17 +200,17 @@ defmodule ExAws.Bedrock.EventStream do
   @doc false
   @spec decode_chunk(binary()) :: list(decoded() | {:incomplete_chunk, binary()})
   def decode_chunk(data) do
-    case decode_messages(data, []) do
-      {chunks, <<>>} ->
-        chunks
-
-      {chunks, rest} when byte_size(rest) < @prelude_length ->
-        chunks ++ [{:incomplete_chunk, rest}]
-
-      {chunks, rest} ->
-        chunks ++ [{:bad_chunk, rest, :invalid_chunk}]
-    end
+    {chunks, rest} = decode_messages(data, [])
+    chunks ++ leftover(rest)
   end
+
+  # Bytes that do not make up a whole message once there is no more data.
+  defp leftover(<<>>), do: []
+
+  defp leftover(rest) when byte_size(rest) < @prelude_length,
+    do: [{:incomplete_chunk, rest}]
+
+  defp leftover(rest), do: [{:bad_chunk, rest, :invalid_chunk}]
 
   # Decodes every complete message in the buffer, returning the bytes of a
   # trailing partial message so they can be prepended to the next binary.
