@@ -73,7 +73,7 @@ defmodule ExAws.Bedrock.EventStreamTest do
       <<head::binary-size(10), tail::binary>> = chunk
 
       assert [{:chunk, _}] =
-               [chunk, head, tail]
+               [head, tail]
                |> Stream.concat(Stream.repeatedly(fn -> flunk("stream read too far") end))
                |> EventStream.decode_stream()
                |> Enum.take(1)
