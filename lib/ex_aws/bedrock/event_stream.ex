@@ -223,8 +223,9 @@ defmodule ExAws.Bedrock.EventStream do
         {Enum.reverse(acc), buffer}
 
       {:error, reason} ->
-        # The declared length cannot be trusted so the start of the next
-        # message is unknown: discard the buffer.
+        # The declared length cannot be used so the start of the next message
+        # is unknown: discard the buffer and resume decoding at the next
+        # binary, which is assumed to start on a message boundary.
         {Enum.reverse([{:bad_chunk, buffer, reason} | acc]), <<>>}
     end
   end
