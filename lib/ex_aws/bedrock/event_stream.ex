@@ -170,6 +170,10 @@ defmodule ExAws.Bedrock.EventStream do
   @prelude_length @uint32_size * 3
   # message_overhead = prelude + message_checksum
   @message_overhead @prelude_length + @checksum_size
+  # The limits the AWS SDKs enforce on a message. A prelude declaring more is
+  # rejected up front, so no more than one message is ever buffered.
+  @max_headers_length 128 * 1024
+  @max_payload_length 24 * 1024 * 1024
 
   @typep decoded :: {:chunk, map()} | {:bad_chunk, binary(), term()}
 
@@ -248,6 +252,12 @@ defmodule ExAws.Bedrock.EventStream do
 
       message_total_length < @message_overhead + headers_length ->
         {:error, :invalid_chunk}
+
+      headers_length > @max_headers_length ->
+        {:error, :headers_too_large}
+
+      message_total_length - @message_overhead - headers_length > @max_payload_length ->
+        {:error, :payload_too_large}
 
       byte_size(buffer) < message_total_length ->
         :incomplete

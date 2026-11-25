@@ -7,6 +7,8 @@ defmodule ExAws.Bedrock.EventStreamTest do
   @checksum_size 4
   @prelude_length @uint32_size * 3
   @message_overhead @prelude_length + @checksum_size
+  @max_headers_length 128 * 1024
+  @max_payload_length 24 * 1024 * 1024
 
   describe "decode_chunk/1" do
     test "should decode single chunk response", %{chunk: chunk} do
@@ -90,6 +92,26 @@ defmodule ExAws.Bedrock.EventStreamTest do
     test "should raise when the stream ends inside a message", %{incomplete_chunk: chunk} do
       assert_raise ExAws.Error, ~r/incomplete message/, fn ->
         decode_stream([chunk])
+      end
+    end
+
+    test "should reject a message over the payload limit without buffering it" do
+      prelude = prelude(@max_payload_length + 1, 0)
+
+      assert [{:bad_chunk, ^prelude, :payload_too_large}] = decode_stream([prelude])
+    end
+
+    test "should reject a message over the headers limit without buffering it" do
+      prelude = prelude(0, @max_headers_length + 1)
+
+      assert [{:bad_chunk, ^prelude, :headers_too_large}] = decode_stream([prelude])
+    end
+
+    test "should wait for a message at the payload and headers limits" do
+      prelude = prelude(@max_payload_length, @max_headers_length)
+
+      assert_raise ExAws.Error, ~r/incomplete message/, fn ->
+        decode_stream([prelude])
       end
     end
   end
@@ -222,6 +244,14 @@ defmodule ExAws.Bedrock.EventStreamTest do
     binaries
     |> EventStream.decode_stream()
     |> Enum.to_list()
+  end
+
+  # The prelude of a message with the given payload and headers lengths.
+  defp prelude(payload_length, headers_length) do
+    message_total_length = @message_overhead + headers_length + payload_length
+    lengths = <<message_total_length::unsigned-32, headers_length::unsigned-32>>
+
+    lengths <> <<:erlang.crc32(lengths)::unsigned-32>>
   end
 
   defp alter_prelude_checksum(chunk) do
