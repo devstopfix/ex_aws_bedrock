@@ -7,30 +7,118 @@ defmodule ExAws.Bedrock.EventStreamTest do
   @checksum_size 4
   @prelude_length @uint32_size * 3
   @message_overhead @prelude_length + @checksum_size
+  @max_headers_length 128 * 1024
+  @max_payload_length 24 * 1024 * 1024
 
-  describe "decode_chunk/1" do
+  describe "decode_stream/1 with a single binary" do
     test "should decode single chunk response", %{chunk: chunk} do
-      assert [{:chunk, %{"outputText" => output_text}}] = EventStream.decode_chunk(chunk)
+      assert [{:chunk, %{"outputText" => output_text}}] = decode_stream([chunk])
       assert String.contains?(output_text, "Elixir")
     end
 
     test "should decode multiple chunks in single response", %{multipart_chunk: multipart_chunk} do
       assert [{:chunk, %{"type" => _}}, {:chunk, %{"type" => _}}] =
-               EventStream.decode_chunk(multipart_chunk)
+               decode_stream([multipart_chunk])
     end
 
     test "should handle invalid prelude checksum", %{chunk_with_invalid_prelude_checksum: chunk} do
       assert [{:bad_chunk, ^chunk, :invalid_prelude_checksum}] =
-               EventStream.decode_chunk(chunk)
+               decode_stream([chunk])
     end
 
     test "should handle invalid message checksum", %{chunk_with_invalid_message_checksum: chunk} do
       assert [{:bad_chunk, ^chunk, :invalid_message_checksum}] =
-               EventStream.decode_chunk(chunk)
+               decode_stream([chunk])
     end
 
     test "should handle incomplete chunk", %{incomplete_chunk: chunk} do
-      assert [{:bad_chunk, ^chunk, :invalid_chunk}] = EventStream.decode_chunk(chunk)
+      assert [{:bad_chunk, ^chunk, :invalid_chunk}] = decode_stream([chunk])
+    end
+  end
+
+  describe "decode_stream/1" do
+    test "should decode a message split at any byte offset", %{chunk: chunk} do
+      expected = decode_stream([chunk])
+      assert [{:chunk, _}] = expected
+
+      for offset <- 0..byte_size(chunk) do
+        <<head::binary-size(^offset), tail::binary>> = chunk
+
+        assert expected == decode_stream([head, tail]), "split at byte #{offset}"
+      end
+    end
+
+    test "should decode multiple messages split at any byte offset", %{
+      multipart_chunk: multipart_chunk
+    } do
+      expected = decode_stream([multipart_chunk])
+      assert [{:chunk, _}, {:chunk, _}] = expected
+
+      for offset <- 0..byte_size(multipart_chunk) do
+        <<head::binary-size(^offset), tail::binary>> = multipart_chunk
+
+        assert expected == decode_stream([head, tail]), "split at byte #{offset}"
+      end
+    end
+
+    test "should decode messages delivered one byte at a time", %{
+      multipart_chunk: multipart_chunk
+    } do
+      bytes = for <<byte <- multipart_chunk>>, do: <<byte>>
+
+      assert decode_stream([multipart_chunk]) == decode_stream(bytes)
+    end
+
+    test "should emit each message as soon as it is complete", %{chunk: chunk} do
+      <<head::binary-size(10), tail::binary>> = chunk
+
+      assert [{:chunk, _}] =
+               [head, tail]
+               |> Stream.concat(Stream.repeatedly(fn -> flunk("stream read too far") end))
+               |> EventStream.decode_stream()
+               |> Enum.take(1)
+    end
+
+    test "should continue after a message with an invalid checksum", %{
+      chunk: chunk,
+      chunk_with_invalid_message_checksum: bad_chunk
+    } do
+      <<head::binary-size(100), tail::binary>> = bad_chunk <> chunk
+
+      assert [{:bad_chunk, ^bad_chunk, :invalid_message_checksum}, {:chunk, _}] =
+               decode_stream([head, tail])
+    end
+
+    test "should report a stream that ends inside a message", %{
+      chunk: chunk,
+      incomplete_chunk: incomplete_chunk
+    } do
+      assert [{:chunk, _}, {:bad_chunk, ^incomplete_chunk, :invalid_chunk}] =
+               decode_stream([chunk, incomplete_chunk])
+    end
+
+    test "should report a stream that ends inside a prelude", %{chunk: chunk} do
+      <<head::binary-size(5), _::binary>> = chunk
+
+      assert [{:chunk, _}, {:incomplete_chunk, ^head}] = decode_stream([chunk, head])
+    end
+
+    test "should reject a message over the payload limit without buffering it" do
+      prelude = prelude(@max_payload_length + 1, 0)
+
+      assert [{:bad_chunk, ^prelude, :payload_too_large}] = decode_stream([prelude])
+    end
+
+    test "should reject a message over the headers limit without buffering it" do
+      prelude = prelude(0, @max_headers_length + 1)
+
+      assert [{:bad_chunk, ^prelude, :headers_too_large}] = decode_stream([prelude])
+    end
+
+    test "should wait for a message at the payload and headers limits" do
+      prelude = prelude(@max_payload_length, @max_headers_length)
+
+      assert [{:bad_chunk, ^prelude, :invalid_chunk}] = decode_stream([prelude])
     end
   end
 
@@ -156,6 +244,20 @@ defmodule ExAws.Bedrock.EventStreamTest do
       chunk_with_invalid_message_checksum: chunk_with_invalid_message_checksum,
       incomplete_chunk: incomplete_chunk
     }
+  end
+
+  defp decode_stream(binaries) do
+    binaries
+    |> EventStream.decode_stream()
+    |> Enum.to_list()
+  end
+
+  # The prelude of a message with the given payload and headers lengths.
+  defp prelude(payload_length, headers_length) do
+    message_total_length = @message_overhead + headers_length + payload_length
+    lengths = <<message_total_length::unsigned-32, headers_length::unsigned-32>>
+
+    lengths <> <<:erlang.crc32(lengths)::unsigned-32>>
   end
 
   defp alter_prelude_checksum(chunk) do

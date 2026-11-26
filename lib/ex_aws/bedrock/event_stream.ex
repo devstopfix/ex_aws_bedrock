@@ -119,7 +119,7 @@ defmodule ExAws.Bedrock.EventStream do
           &Function.identity/1
         )
 
-      Stream.flat_map(stream, &decode_chunk/1)
+      decode_stream(stream)
     end
 
     @doc """
@@ -164,88 +164,132 @@ defmodule ExAws.Bedrock.EventStream do
     end
   end
 
-  @doc false
-  @spec decode_chunk(binary()) :: list({:chunk, map()} | {:bad_chunk, binary(), term()})
-  def decode_chunk(data) do
-    decode_chunks(data, [])
-  end
-
-  defp decode_chunks(<<>>, acc), do: Enum.reverse(acc)
-
-  defp decode_chunks(data, acc) do
-    case parse_chunk(data) do
-      {:ok, chunk, rest} ->
-        decode_chunks(rest, [{:chunk, chunk} | acc])
-
-      {:error, reason, rest} ->
-        decode_chunks(rest, [{:bad_chunk, data, reason} | acc])
-
-      :incomplete ->
-        # May wish to buffer incomplete data
-        [{:incomplete_chunk, data} | acc]
-    end
-  end
-
   @uint32_size 4
   @checksum_size 4
   # prelude_length = message_total_length + headers_length + prelude_checksum
   @prelude_length @uint32_size * 3
   # message_overhead = prelude + message_checksum
   @message_overhead @prelude_length + @checksum_size
-  defp parse_chunk(
+  # The limits the AWS SDKs enforce on a message. A prelude declaring more is
+  # rejected up front, so no more than one message is ever buffered.
+  @max_headers_length 128 * 1024
+  @max_payload_length 24 * 1024 * 1024
+
+  @typep decoded :: {:chunk, map()} | {:bad_chunk, binary(), term()}
+
+  @doc false
+  # Decodes a stream of binaries into event stream messages.
+  #
+  # The transport gives no guarantee that a binary holds a whole number of
+  # messages: a message may be split across any number of binaries. Bytes are
+  # buffered until the message length declared in the prelude has arrived.
+  #
+  # Bytes left over when the stream ends are reported as a bad or incomplete
+  # chunk.
+  @spec decode_stream(Enumerable.t()) :: Enumerable.t()
+  def decode_stream(stream) do
+    # Runs once, before the first binary: nothing is buffered yet.
+    empty_buffer = fn -> <<>> end
+
+    # Runs for every binary: emit the whole messages, keep the rest buffered.
+    decode_binary = fn data, buffer -> decode_messages(buffer <> data, []) end
+
+    # Runs once, after the last binary: report bytes that never made a message.
+    report_leftover = fn buffer -> {leftover(buffer), <<>>} end
+
+    # Runs last, also when the consumer stops early: nothing to clean up.
+    no_cleanup = fn _buffer -> :ok end
+
+    Stream.transform(stream, empty_buffer, decode_binary, report_leftover, no_cleanup)
+  end
+
+  # Bytes that do not make up a whole message once there is no more data.
+  defp leftover(<<>>), do: []
+
+  defp leftover(rest) when byte_size(rest) < @prelude_length,
+    do: [{:incomplete_chunk, rest}]
+
+  defp leftover(rest), do: [{:bad_chunk, rest, :invalid_chunk}]
+
+  # Decodes every complete message in the buffer, returning the bytes of a
+  # trailing partial message so they can be prepended to the next binary.
+  @spec decode_messages(binary(), list(decoded())) :: {list(decoded()), binary()}
+  defp decode_messages(buffer, acc) do
+    case split_message(buffer) do
+      {:ok, message, rest} ->
+        decode_messages(rest, [decode_message(message) | acc])
+
+      :incomplete ->
+        {Enum.reverse(acc), buffer}
+
+      {:error, reason} ->
+        # The declared length cannot be used so the start of the next message
+        # is unknown: discard the buffer and resume decoding at the next
+        # binary, which is assumed to start on a message boundary.
+        {Enum.reverse([{:bad_chunk, buffer, reason} | acc]), <<>>}
+    end
+  end
+
+  defp split_message(
          <<
            message_total_length::unsigned-32,
            headers_length::unsigned-32,
            prelude_checksum::unsigned-32,
-           headers::binary-size(headers_length),
-           rest::binary
-         >> = data
-       )
-       when byte_size(data) >= message_total_length do
-    message_length = message_total_length - @message_overhead
-    body_length = message_length - headers_length
+           _::binary
+         >> = buffer
+       ) do
+    prelude = <<message_total_length::unsigned-32, headers_length::unsigned-32>>
 
-    if byte_size(rest) >= body_length + @checksum_size do
-      <<
-        body::binary-size(^body_length),
-        message_checksum::unsigned-32,
-        next_data::binary
-      >> = rest
+    cond do
+      crc32(prelude) != prelude_checksum ->
+        {:error, :invalid_prelude_checksum}
 
-      prelude = <<message_total_length::unsigned-32, headers_length::unsigned-32>>
+      message_total_length < @message_overhead + headers_length ->
+        {:error, :invalid_chunk}
 
-      with :ok <- verify_prelude_checksum(prelude, prelude_checksum),
-           :ok <-
-             verify_message_checksum(prelude, prelude_checksum, headers, body, message_checksum),
-           {:ok, chunk} <- process_chunk(body) do
-        {:ok, chunk, next_data}
-      else
-        {:error, reason} -> {:error, reason, next_data}
-      end
-    else
-      :incomplete
+      headers_length > @max_headers_length ->
+        {:error, :headers_too_large}
+
+      message_total_length - @message_overhead - headers_length > @max_payload_length ->
+        {:error, :payload_too_large}
+
+      byte_size(buffer) < message_total_length ->
+        :incomplete
+
+      true ->
+        <<message::binary-size(^message_total_length), rest::binary>> = buffer
+        {:ok, message, rest}
     end
   end
 
-  defp parse_chunk(data) when byte_size(data) < @prelude_length do
-    :incomplete
-  end
+  defp split_message(_buffer), do: :incomplete
 
-  defp parse_chunk(_data) do
-    {:error, :invalid_chunk, <<>>}
-  end
+  defp decode_message(
+         <<_message_total_length::unsigned-32, headers_length::unsigned-32, _::binary>> = message
+       ) do
+    checked_length = byte_size(message) - @checksum_size
+    body_length = checked_length - @prelude_length - headers_length
 
-  defp verify_prelude_checksum(prelude, checksum) do
-    if crc32(prelude) == checksum do
-      :ok
+    <<
+      checked::binary-size(^checked_length),
+      message_checksum::unsigned-32
+    >> = message
+
+    <<
+      _prelude::binary-size(@prelude_length),
+      _headers::binary-size(^headers_length),
+      body::binary-size(^body_length)
+    >> = checked
+
+    with :ok <- verify_message_checksum(checked, message_checksum),
+         {:ok, chunk} <- process_chunk(body) do
+      {:chunk, chunk}
     else
-      {:error, :invalid_prelude_checksum}
+      {:error, reason} -> {:bad_chunk, message, reason}
     end
   end
 
-  defp verify_message_checksum(prelude, prelude_checksum, headers, body, checksum) do
-    message = prelude <> <<prelude_checksum::unsigned-32>> <> headers <> body
-
+  defp verify_message_checksum(message, checksum) do
     if crc32(message) == checksum do
       :ok
     else
