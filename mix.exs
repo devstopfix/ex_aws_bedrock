@@ -1,7 +1,7 @@
 defmodule ExAws.Bedrock.MixProject do
   use Mix.Project
 
-  @version "2.7.0"
+  @version "2.7.2"
   @service "bedrock"
   @url "https://github.com/devstopfix/ex_aws_#{@service}"
   @name "ExAws.Bedrock"
@@ -13,7 +13,7 @@ defmodule ExAws.Bedrock.MixProject do
       description:
         "The easiest way to build and scale generative AI applications with foundation models",
       docs: [main: @name, source_ref: "v#{@version}", source_url: @url],
-      elixir: "~> 1.16",
+      elixir: "~> 1.17",
       package: package(),
       start_permanent: Mix.env() == :prod,
       version: @version
